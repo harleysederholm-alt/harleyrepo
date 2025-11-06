@@ -1,0 +1,244 @@
+{
+  "name": "PienHankinta-Vahti: Skreippaus → Groq → Supabase",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 30
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://www.vantaa.fi/hankinnat-ja-kilpailutukset",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "http-request-vantaa",
+      "name": "Hae Vantaan hankinnat",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [450, 300],
+      "notes": "PLACEHOLDER: Korvaa oikealla URL:lla ja lisää muut kunnat"
+    },
+    {
+      "parameters": {
+        "dataPropertyName": "data",
+        "extractionValues": {
+          "values": [
+            {
+              "key": "otsikko",
+              "cssSelector": ".hankinta-otsikko",
+              "returnValue": "text"
+            },
+            {
+              "key": "linkki_lahteeseen",
+              "cssSelector": ".hankinta-otsikko a",
+              "returnValue": "attribute",
+              "attribute": "href"
+            },
+            {
+              "key": "maarapaiva",
+              "cssSelector": ".maarapaiva",
+              "returnValue": "text"
+            },
+            {
+              "key": "kuvaus",
+              "cssSelector": ".kuvaus",
+              "returnValue": "text"
+            }
+          ]
+        }
+      },
+      "id": "html-extract",
+      "name": "Parsii HTML",
+      "type": "n8n-nodes-base.html",
+      "typeVersion": 1.1,
+      "position": [650, 300],
+      "notes": "HUOM: CSS-selektorit ovat placeholdereita. Päivitä kunnan sivuston mukaan."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Tarkistetaan Supabasesta, onko tämä hankinta jo tallennettu\nconst items = $input.all();\nconst supabaseUrl = $env.SUPABASE_URL;\nconst serviceRoleKey = $env.SUPABASE_SERVICE_ROLE_KEY;\n\nconst outputItems = [];\n\nfor (const item of items) {\n  const linkki = item.json.linkki_lahteeseen;\n  \n  if (!linkki) {\n    console.log('Ei linkkiä, skipataan');\n    continue;\n  }\n  \n  // Tarkista Supabasesta\n  const response = await fetch(\n    `${supabaseUrl}/rest/v1/hankinnat?linkki_lahteeseen=eq.${encodeURIComponent(linkki)}&select=id`,\n    {\n      headers: {\n        'apikey': serviceRoleKey,\n        'Authorization': `Bearer ${serviceRoleKey}`,\n        'Content-Type': 'application/json'\n      }\n    }\n  );\n  \n  const existing = await response.json();\n  \n  if (existing.length === 0) {\n    // Ei löytynyt → Jatka prosessointia\n    console.log(`Uusi hankinta: ${linkki}`);\n    outputItems.push(item);\n  } else {\n    console.log(`Hankinta jo olemassa: ${linkki}`);\n  }\n}\n\nreturn outputItems;"
+      },
+      "id": "function-check-duplicates",
+      "name": "Tarkista duplikaatit",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [850, 300],
+      "notes": "Tarkistaa Supabasesta, onko linkki_lahteeseen jo olemassa"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "groqApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.GROQ_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "llama3-70b-8192"
+            },
+            {
+              "name": "messages",
+              "value": "={{ [\n  {\n    \"role\": \"system\",\n    \"content\": \"Olet suomalainen hankinta-asiantuntija. Tehtäväsi on analysoida raakaa tekstiä kuntien tarjouspyynnöistä ja purkaa se TARKAKSI JSON-objektiksi. Vastaa VAIN JSON-muodossa. Älä selitä. Käytä suomea. Jos et löydä tietoa, palauta 'null'.\\n\\nJSON-muoto:\\n{\\n  \\\"toimiala_ai\\\": \\\"[Paras arvaus: esim. Rakentaminen, IT, Siivous, Konsultointi]\\\",\\n  \\\"tiivistelma_ai\\\": \\\"[Yhden kappaleen tiivistelmä siitä, mitä ollaan ostamassa.]\\\",\\n  \\\"riskit_ai\\\": \\\"[Mainitse 1-3 tärkeintä riskiä tai poikkeuksellista vaatimusta, jotka pienyrittäjän tulisi huomata, esim. lyhyt määräaika, suuri sopimussakko, vaadittu sertifiointi.]\\\"\\n}\"\n  },\n  {\n    \"role\": \"user\",\n    \"content\": \"Tässä on raakadata: \" + JSON.stringify($json)\n  }\n] }}"
+            },
+            {
+              "name": "temperature",
+              "value": "0.3"
+            },
+            {
+              "name": "max_tokens",
+              "value": "1024"
+            },
+            {
+              "name": "response_format",
+              "value": "={{ { \"type\": \"json_object\" } }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-request-groq",
+      "name": "Groq: Analysoi hankinta",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1050, 300],
+      "notes": "Lähettää hankinnan datan Groq API:lle analysoitavaksi"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Yhdistä alkuperäinen data ja Groq:n analyysi\nconst items = $input.all();\nconst outputItems = [];\n\nfor (const item of items) {\n  const alkuperainenData = item.json;\n  const groqResponse = alkuperainenData.choices?.[0]?.message?.content;\n  \n  if (!groqResponse) {\n    console.error('Groq ei palauttanut dataa');\n    continue;\n  }\n  \n  let groqData;\n  try {\n    groqData = JSON.parse(groqResponse);\n  } catch (e) {\n    console.error('Groq-vastaus ei ole validia JSONia:', groqResponse);\n    continue;\n  }\n  \n  // Luo lopullinen objekti Supabasea varten\n  const supabaseData = {\n    otsikko: alkuperainenData.otsikko || 'Ei otsikkoa',\n    kunta: 'Vantaa', // TODO: Dynaaminen\n    maarapaiva: alkuperainenData.maarapaiva || null,\n    linkki_lahteeseen: alkuperainenData.linkki_lahteeseen,\n    toimiala_ai: groqData.toimiala_ai,\n    tiivistelma_ai: groqData.tiivistelma_ai,\n    riskit_ai: groqData.riskit_ai,\n    raakadata: alkuperainenData\n  };\n  \n  outputItems.push({ json: supabaseData });\n}\n\nreturn outputItems;"
+      },
+      "id": "function-prepare-supabase",
+      "name": "Valmistele Supabase-data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1250, 300]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "tableId": "hankinnat",
+        "options": {}
+      },
+      "id": "supabase-insert",
+      "name": "Tallenna Supabaseen",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1450, 300],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-credentials",
+          "name": "Supabase API"
+        }
+      },
+      "notes": "Tallentaa hankinnan Supabase-tietokantaan"
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Hae Vantaan hankinnat",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hae Vantaan hankinnat": {
+      "main": [
+        [
+          {
+            "node": "Parsii HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parsii HTML": {
+      "main": [
+        [
+          {
+            "node": "Tarkista duplikaatit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tarkista duplikaatit": {
+      "main": [
+        [
+          {
+            "node": "Groq: Analysoi hankinta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq: Analysoi hankinta": {
+      "main": [
+        [
+          {
+            "node": "Valmistele Supabase-data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Valmistele Supabase-data": {
+      "main": [
+        [
+          {
+            "node": "Tallenna Supabaseen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "PienHankinta-Vahti",
+      "id": "pienhankinta"
+    }
+  ],
+  "meta": {
+    "instanceId": "pienhankinta-vahti"
+  },
+  "pinData": {},
+  "versionId": "1.0.0"
+}

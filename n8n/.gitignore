@@ -1,0 +1,18 @@
+# Ympäristömuuttujat (TÄRKEÄ: Älä commitoi!)
+.env
+
+# n8n data (lokaalit tiedostot)
+.n8n/
+data/
+
+# Docker volumes
+volumes/
+
+# Lokit
+*.log
+logs/
+
+# Temp files
+*.tmp
+.DS_Store
+Thumbs.db
