@@ -1,8 +1,10 @@
 'use client';
 
-import { X, Calendar, MapPin, ExternalLink, AlertTriangle, FileText } from 'lucide-react';
+import { useState } from 'react';
+import { X, Calendar, MapPin, ExternalLink, AlertTriangle, FileText, Sparkles } from 'lucide-react';
 import { formatDateFi, daysUntil } from '@/lib/utils';
 import type { Hankinta, Profile } from '@/types/database.types';
+import { generateTarjousluonnos } from '@/app/actions';
 
 interface HankintaModalProps {
   hankinta: Hankinta;
@@ -12,9 +14,39 @@ interface HankintaModalProps {
 
 export default function HankintaModal({
   hankinta,
+  profile,
   onClose,
 }: HankintaModalProps) {
   const daysLeft = hankinta.maarapaiva ? daysUntil(hankinta.maarapaiva) : null;
+  const [generatingProposal, setGeneratingProposal] = useState(false);
+  const [proposal, setProposal] = useState<string | null>(null);
+
+  const handleGenerateProposal = async () => {
+    if (!profile?.ai_profiili_kuvaus) {
+      alert('Profiili puuttuu. Täytä profiilisi ensin.');
+      return;
+    }
+
+    setGeneratingProposal(true);
+
+    try {
+      const result = await generateTarjousluonnos(
+        hankinta,
+        profile.ai_profiili_kuvaus
+      );
+
+      if (result.success && result.luonnos) {
+        setProposal(result.luonnos);
+      } else {
+        alert(`Virhe: ${result.error || 'Tuntematon virhe'}`);
+      }
+    } catch (error) {
+      console.error('Virhe tarjousluonnoksen generoinnissa:', error);
+      alert('Virhe tarjousluonnoksen generoinnissa');
+    } finally {
+      setGeneratingProposal(false);
+    }
+  };
 
   return (
     <div
@@ -120,6 +152,70 @@ export default function HankintaModal({
             >
               Avaa kunnan sivulla <ExternalLink className="ml-2 h-4 w-4" />
             </a>
+          </div>
+
+          {/* Tarjousapuri (Premium-ominaisuus) */}
+          <div className="border-t border-gray-200 pt-6">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold text-gray-700 flex items-center">
+                <Sparkles className="h-4 w-4 mr-2 text-primary-600" />
+                AI-Tarjousapuri
+              </h3>
+              <span className="badge bg-purple-100 text-purple-800 text-xs">
+                Premium
+              </span>
+            </div>
+            <p className="text-sm text-gray-600 mb-4">
+              Generoi ammattimainen tarjousluonnos tämän hankinnan perusteella käyttäen AI:ta.
+            </p>
+
+            {!proposal ? (
+              <button
+                onClick={handleGenerateProposal}
+                disabled={generatingProposal}
+                className="btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {generatingProposal ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white inline-block mr-2"></div>
+                    Generoidaan...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="h-4 w-4 inline-block mr-2" />
+                    Luo tarjousluonnos
+                  </>
+                )}
+              </button>
+            ) : (
+              <div>
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="font-semibold text-green-900">
+                      ✅ Tarjousluonnos valmis!
+                    </h4>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(proposal);
+                        alert('Kopioitu leikepöydälle!');
+                      }}
+                      className="text-sm text-green-700 hover:underline"
+                    >
+                      Kopioi
+                    </button>
+                  </div>
+                  <pre className="whitespace-pre-wrap text-sm text-gray-800 font-sans leading-relaxed">
+                    {proposal}
+                  </pre>
+                </div>
+                <button
+                  onClick={() => setProposal(null)}
+                  className="btn-ghost w-full text-sm"
+                >
+                  Generoi uudelleen
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Raakadata (Debug - piilota tuotannossa) */}
