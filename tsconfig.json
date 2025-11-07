@@ -26,5 +26,24 @@
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules"]
+  "exclude": [
+    "node_modules",
+    "corpshield",
+    "gemini-cli",
+    "n8n",
+    "ComfyUI",
+    "ComfyUI-Manager",
+    "browser-extension",
+    "chatbot-backend",
+    "backend-api-node",
+    "frontend-react",
+    "services-llm-python",
+    "privacy-audit-app",
+    "SchemaPro",
+    "deploy",
+    "database",
+    "docs",
+    "examples",
+    "packages/SHCEMA-Injector"
+  ]
 }
