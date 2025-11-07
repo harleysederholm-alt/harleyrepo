@@ -16,17 +16,27 @@ Tämä kansio sisältää Supabase-tietokannan migraatiot ja konfiguraatiotiedos
    - `anon/public key`
    - `service_role key` (TÄRKEÄ: Tarvitaan n8n:lle)
 
-### 2. Migraation ajaminen
+### 2. Migraatioiden ajaminen
 
 #### Vaihtoehto A: Supabase SQL Editor (Suositeltu)
+
+**TÄRKEÄ:** Aja migraatiot JÄRJESTYKSESSÄ!
 
 1. Kirjaudu Supabase Dashboard -näkymään
 2. Valitse projektisi
 3. Mene kohtaan **SQL Editor** (vasemmasta valikosta)
+
+**Vaihe 1:** Aja perusmigraatio
 4. Avaa tiedosto `migrations/001_initial_schema.sql`
 5. Kopioi sisältö ja liitä se SQL Editoriin
 6. Klikkaa **RUN** tai paina `Ctrl+Enter`
 7. Tarkista, että saat vihreän "Success" -viestin
+
+**Vaihe 2:** Aja täydennysmääritykset
+8. Avaa tiedosto `migrations/002_add_missing_tables_and_stripe.sql`
+9. Kopioi sisältö ja liitä se SQL Editoriin
+10. Klikkaa **RUN** tai paina `Ctrl+Enter`
+11. Tarkista, että saat vihreän "Success" -viestin
 
 #### Vaihtoehto B: Supabase CLI (Edistynyt)
 
@@ -48,63 +58,56 @@ supabase db push
 
 1. Mene **Table Editor** -näkymään
 2. Sinun pitäisi nähdä seuraavat taulut:
-   - ✅ `profiles`
-   - ✅ `hankinnat`
+   - ✅ `profiles` (9 saraketta)
+   - ✅ `hankinnat` (10 saraketta)
+   - ✅ `user_hankinta_scores` (7 saraketta)
+   - ✅ `user_alerts` (7 saraketta)
 
 ### 4. Tarkista RLS-säännöt
 
 1. Mene **Authentication** > **Policies**
 2. Tarkista, että seuraavat politiikat ovat aktiivisia:
-   - `profiles`: 4 politiikkaa (SELECT, INSERT, UPDATE, DELETE)
-   - `hankinnat`: 3 politiikkaa (SELECT, INSERT, UPDATE)
+   - `profiles`: 4 politiikkaa
+   - `hankinnat`: 3 politiikkaa
+   - `user_hankinta_scores`: 4 politiikkaa
+   - `user_alerts`: 4 politiikkaa
 
 ## Tietokantaskeema
 
-### `profiles`-taulu
+> **📖 Katso täydellinen dokumentaatio:** [TIETOKANTASKEEMA.md](./TIETOKANTASKEEMA.md)
 
-Sisältää käyttäjäkohtaiset asetukset ja AI-profiilin.
+### Taulut (4 kpl)
 
-| Sarake | Tyyppi | Kuvaus |
-|--------|--------|--------|
-| `id` | UUID | Viittaus `auth.users(id)` |
-| `paikkakunnat` | TEXT[] | Käyttäjän valitsemat paikkakunnat |
-| `toimialat` | TEXT[] | Käyttäjän valitsemat toimialat |
-| `ai_profiili_kuvaus` | TEXT | **TÄRKEIN:** Vapaamuotoinen kuvaus yrityksestä |
-| `created_at` | TIMESTAMP | Luontiaika |
-| `updated_at` | TIMESTAMP | Päivitysaika (päivittyy automaattisesti) |
+1. **`profiles`** - Käyttäjäprofiilit + Stripe-integraatio (9 saraketta)
+2. **`hankinnat`** - Pienhankintailmoitukset (10 saraketta)
+3. **`user_hankinta_scores`** - AI-osuvuuspisteet 0-100 (7 saraketta)
+4. **`user_alerts`** - Tallennetut hälytykset (7 saraketta)
 
-### `hankinnat`-taulu
+### Tärkeimmät kentät
 
-Sisältää kaikki kerätyt pienhankintailmoitukset.
+#### `profiles`
+- `plan` (TEXT): **KRIITTINEN** - `'free'`, `'pro'` tai `'agentti'`
+- `subscription_status` (TEXT): Stripe-tilauksen status
+- `stripe_customer_id` (TEXT): Stripe Customer ID
+- `ai_profiili_kuvaus` (TEXT): AI-matching-perusta
 
-| Sarake | Tyyppi | Kuvaus |
-|--------|--------|--------|
-| `id` | BIGINT | Automaattinen ID |
-| `otsikko` | TEXT | Hankinnan otsikko |
-| `kunta` | TEXT | Kunta/kaupunki |
-| `maarapaiva` | TIMESTAMP | Tarjouksen määräpäivä |
-| `linkki_lahteeseen` | TEXT | **UNIQUE:** Alkuperäinen URL (estää duplikaatit) |
-| `toimiala_ai` | TEXT | AI:n luokittelema toimiala |
-| `tiivistelma_ai` | TEXT | AI:n generoima tiivistelmä |
-| `riskit_ai` | TEXT | AI:n tunnistama riskit |
-| `raakadata` | JSONB | Alkuperäinen skreipattu data |
-| `created_at` | TIMESTAMP | Luontiaika |
-| `updated_at` | TIMESTAMP | Päivitysaika |
+#### `hankinnat`
+- `created_at` (TIMESTAMP): **KRIITTINEN** - 24h viive Free-käyttäjille
+- `tiivistelma_ai` (TEXT): Groq-generoitu tiivistelmä
+- `riskit_ai` (TEXT): Groq-generoitu riskianalyysi
+
+#### `user_hankinta_scores`
+- `score` (INTEGER): Osuvuuspistemäärä 0-100
+- `perustelu_ai` (TEXT): AI:n selitys
 
 ## RLS (Row Level Security)
 
-### `profiles`-taulu
-
-- ✅ Käyttäjät voivat lukea **VAIN** oman profiilinsa
-- ✅ Käyttäjät voivat päivittää **VAIN** oman profiilinsa
-- ✅ Uudet käyttäjät voivat luoda oman profiilinsa
-- ✅ Profiili luodaan **automaattisesti** kun käyttäjä rekisteröityy
-
-### `hankinnat`-taulu
-
-- ✅ **Kaikki** autentikoituneet käyttäjät voivat **lukea** hankintoja
-- ✅ **VAIN** `service_role` (n8n) voi **lisätä** ja **päivittää** hankintoja
-- ❌ Tavalliset käyttäjät **eivät voi** lisätä tai muokata hankintoja
+| Taulu | SELECT | INSERT | UPDATE | DELETE |
+|-------|--------|--------|--------|--------|
+| `profiles` | ✅ Oma rivi | ✅ Oma rivi | ✅ Oma rivi | ✅ Oma rivi |
+| `hankinnat` | ✅ Kaikki auth | ⚠️ service_role | ⚠️ service_role | ❌ Ei kukaan |
+| `user_hankinta_scores` | ✅ Omat rivit | ⚠️ service_role | ⚠️ service_role | ⚠️ service_role |
+| `user_alerts` | ✅ Omat rivit | ✅ Omat rivit | ✅ Omat rivit | ✅ Omat rivit |
 
 ## Testaaminen
 
@@ -133,7 +136,8 @@ GROQ_API_KEY=gsk_...
 
 ## Seuraavat vaiheet
 
-✅ Vaihe 1 valmis: Tietokantaskeema ja RLS
-⏭️ Vaihe 2: n8n-automaation pohjustus (Docker + Workflow)
-⏭️ Vaihe 3: Frontend-toteutus (Next.js)
-⏭️ Vaihe 4: AI-ominaisuudet
+✅ **Vaihe 1 VALMIS:** Tietokantaskeema ja RLS-säännöt
+⏭️ **Vaihe 2:** n8n-automaation pohjustus (Docker + Workflow)
+⏭️ **Vaihe 3:** Stripe-integraatio (Webhook + Server Actions)
+⏭️ **Vaihe 4:** Frontend-toteutus (Dashboard + Freemium-logiikka)
+⏭️ **Vaihe 5:** AI-ominaisuudet (Groq-integraatio)
