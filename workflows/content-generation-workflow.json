@@ -1,0 +1,85 @@
+{
+  "name": "Brand Voice Content Generation Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "a7cg44g4-6f00-5b47-0f63-9g4d7f9c3b2e",
+        "requestMethod": "POST"
+      },
+      "name": "Webhook - Content Generation",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [100, 200],
+      "webhookId": "a7cg44g4-6f00-5b47-0f63-9g4d7f9c3b2e"
+    },
+    {
+      "parameters": {
+        "fileName": "brand_profile_{{ $json.body.user_id || 'default' }}.json"
+      },
+      "name": "Load Brand Profile",
+      "type": "n8n-nodes-base.readFile",
+      "typeVersion": 1,
+      "position": [300, 200]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "hasSystemMessage": true,
+        "systemMessage": "Olet ammattikirjoittaja ja sisältöstrategi. Tehtäväsi on tuottaa sisältöä, joka noudattaa TÄSMÄLLEEN annettua brändiprofiilia.\n\nOLET ANTAMASI BRÄNDIPROFIILI (täytä automaattisesti):\n{{ $node[\"Load Brand Profile\"].json.data }}\n\nNOUdata seuraavia vaatimuksia:\n1. Käytä profiilin \"tone\"-adjektiiveja\n2. Sovita lauseiden pituus \"sentence_structure\"-ohjeen mukaan\n3. Sisällytä \"key_terminology\" termit luonnollisesti\n4. Vältä \"negative_keywords\"-sanoja\n5. Sovita formaliteettitaso \"formality\"-arvon mukaan (1-10)\n\nGeneroi sisältöä, joka tuntuu kirjoitetulta saman yrityksen/henkilön toimesta.",
+        "message": "PYYNTÖ:\n{{ $json.body.prompt }}"
+      },
+      "name": "Claude - Generate Content",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 3,
+      "position": [500, 200],
+      "credentials": {
+        "openAiApi": "anthropic"
+      }
+    },
+    {
+      "parameters": {
+        "responseCode": 200,
+        "responseData": "{\n  \"status\": \"success\",\n  \"generated_content\": {{ $json.data.message }}\n}"
+      },
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [700, 200]
+    }
+  ],
+  "connections": {
+    "Webhook - Content Generation": {
+      "main": [
+        [
+          {
+            "node": "Load Brand Profile",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Brand Profile": {
+      "main": [
+        [
+          {
+            "node": "Claude - Generate Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude - Generate Content": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

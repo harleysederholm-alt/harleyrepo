@@ -1,0 +1,85 @@
+{
+  "name": "Brand Voice Training Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "d6bf33f3-5e99-4a36-9e52-8f3c6e8b2a1d",
+        "requestMethod": "POST"
+      },
+      "name": "Webhook - Brand Training",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [100, 200],
+      "webhookId": "d6bf33f3-5e99-4a36-9e52-8f3c6e8b2a1d"
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "hasSystemMessage": true,
+        "systemMessage": "Olet brändistrategisti ja lingvisti. Tehtäväsi on analysoida annetut esimerkkitekstit ja luoda yksityiskohtainen \"brändi-ääni-profiili\". Profiilin tulee olla JSON-muodossa. Kuvaile ääni adjektiivein, analysoi lauseiden pituus, muodollisuus ja käytetty terminologia.\n\nPalauta VAIN JSON-objekti. Älä kirjoita mitään muuta.\n\nEsimerkki JSON-palautteesta:\n{\n  \"tone\": [\"ammattimainen\", \"luotettava\", \"hieman muodollinen\"],\n  \"formality\": 8,\n  \"sentence_structure\": \"Vaihteleva, mutta selkeä. Suosii tarkkoja lauseita.\",\n  \"key_terminology\": [\"innovaatio\", \"asiakaslähtöinen\", \"kestävä kehitys\"],\n  \"negative_keywords\": [\"halpa\", \"nopea\", \"helppo\"],\n  \"vocabulary_level\": \"ammatillinen\",\n  \"emotional_appeal\": \"luottamus, vakavuus\",\n  \"writing_style\": \"selkeä, asiallinen, tarkka\"\n}",
+        "message": "Analysoi nämä tekstit ja luo brändiprofiili:\n\n{{ $json.body.brand_examples.join('\\n\\n---\\n\\n') }}"
+      },
+      "name": "Claude - Analyze Brand Voice",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 3,
+      "position": [300, 200],
+      "credentials": {
+        "openAiApi": "anthropic"
+      }
+    },
+    {
+      "parameters": {
+        "fileName": "brand_profile_{{ $json.body.user_id || 'default' }}.json"
+      },
+      "name": "Save Brand Profile",
+      "type": "n8n-nodes-base.writeFile",
+      "typeVersion": 1,
+      "position": [500, 200]
+    },
+    {
+      "parameters": {
+        "responseCode": 200,
+        "responseData": "{\n  \"status\": \"Brändiprofiili tallennettu onnistuneesti!\",\n  \"profile\": {{ $json.data }}\n}"
+      },
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [700, 200]
+    }
+  ],
+  "connections": {
+    "Webhook - Brand Training": {
+      "main": [
+        [
+          {
+            "node": "Claude - Analyze Brand Voice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude - Analyze Brand Voice": {
+      "main": [
+        [
+          {
+            "node": "Save Brand Profile",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Brand Profile": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
