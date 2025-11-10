@@ -1,0 +1,231 @@
+{
+  "name": "MyCashflow Raportoija - Webhook API",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "webhook/mycashflow-reporter",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook - MyCashflow Kysely",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 300],
+      "webhookId": "{{ $env.WEBHOOK_ID_MYCASHFLOW }}",
+      "notes": "Vastaanottaa POST-pyynnön: {apiKey, question}"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.mycashflow.fi/v1/products?limit=100",
+        "authentication": "genericCredentialType",
+        "genericCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Mcc-Auth",
+              "value": "={{ $json.body.apiKey }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "paginate": false
+        }
+      },
+      "id": "fetch-products",
+      "name": "Hae MyCashflow tuotteet",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [450, 200],
+      "notes": "Hakee tuotteet MyCashflow API:sta käyttäjän API-avaimella"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.mycashflow.fi/v1/orders?limit=100",
+        "authentication": "genericCredentialType",
+        "genericCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Mcc-Auth",
+              "value": "={{ $json.body.apiKey }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000,
+          "paginate": false
+        }
+      },
+      "id": "fetch-orders",
+      "name": "Hae MyCashflow tilaukset",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [450, 400],
+      "notes": "Hakee tilaukset MyCashflow API:sta"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Yhdistetään tuotteet ja tilaukset strukturoidussa muodossa\nconst products = $node['Hae MyCashflow tuotteet'].json;\nconst orders = $node['Hae MyCashflow tilaukset'].json;\nconst question = $json.body.question;\n\n// Rakennetaan datakonteksti\nconst context = {\n  products: products?.data || [],\n  orders: orders?.data || [],\n  question: question\n};\n\n// Lasketaan perustilastot\nlet topProducts = {};\nlet totalSales = 0;\nlet orderCount = 0;\n\nif (orders?.data && Array.isArray(orders.data)) {\n  orderCount = orders.data.length;\n  orders.data.forEach(order => {\n    totalSales += order.orderTotal || 0;\n    if (order.items && Array.isArray(order.items)) {\n      order.items.forEach(item => {\n        const key = item.productName || item.productId;\n        topProducts[key] = (topProducts[key] || 0) + item.quantity;\n      });\n    }\n  });\n}\n\nconst summary = {\n  totalOrders: orderCount,\n  totalSales: totalSales,\n  topProducts: Object.entries(topProducts)\n    .sort((a, b) => b[1] - a[1])\n    .slice(0, 5)\n    .map(([name, quantity]) => ({ name, quantity }))\n};\n\nreturn {\n  context,\n  summary,\n  processedAt: new Date().toISOString()\n};"
+      },
+      "id": "prepare-context",
+      "name": "Valmistele LLM-konteksti",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 300],
+      "notes": "Yhdistää tuotteet ja tilaukset strukturoidussa muodossa LLM:lle"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "groqApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.GROQ_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "mixtral-8x7b-32768"
+            },
+            {
+              "name": "messages",
+              "value": "={{ [ { \"role\": \"system\", \"content\": \"Olet avulias suomalainen verkkokaupapalvelun analyysiagentti. Analysoit MyCashflow-dataa ja vastaat käyttäjän kysymyksiin suomeksi. Ole tarkka, käytä numeroita ja faktoja. Vastaa lyhyesti ja asiakkaalle ymmärrettävässä muodossa.\" }, { \"role\": \"user\", \"content\": `Tässä on minun kaupan tiedot:\\n\\nTilaukset (${$node[\\\"prepare-context\\\"].json.summary.totalOrders} kpl, yhteensä ${$node[\\\"prepare-context\\\"].json.summary.totalSales}€):\\n${JSON.stringify($node[\\\"prepare-context\\\"].json.summary.topProducts, null, 2)}\\n\\nKaikki tuotteet:\\n${JSON.stringify($node[\\\"prepare-context\\\"].json.context.products.slice(0, 20), null, 2)}\\n\\nKaikki tilaukset:\\n${JSON.stringify($node[\\\"prepare-context\\\"].json.context.orders.slice(0, 10), null, 2)}\\n\\nKysymys: ${$json.body.question}` } ] }}"
+            },
+            {
+              "name": "temperature",
+              "value": "0.7"
+            },
+            {
+              "name": "max_tokens",
+              "value": "1024"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "llm-analysis",
+      "name": "Groq: Analysoi kysymys",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [850, 300],
+      "notes": "Käyttää Groq API:a MyCashflow-datan analysointiin suomeksi"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Ekstraktoi LLM:n vastaus ja muotoile\nconst response = $json.choices?.[0]?.message?.content || 'Virhe: Vastausta ei voitu hakea.';\nconst question = $node['webhook-trigger'].json.body.question;\n\nreturn {\n  success: true,\n  question: question,\n  answer: response,\n  timestamp: new Date().toISOString(),\n  source: 'MyCashflow Reporter API'\n};"
+      },
+      "id": "format-response",
+      "name": "Muotoile vastaus",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1050, 300],
+      "notes": "Muotoilee LLM-vastauksen JSON-muotoon"
+    },
+    {
+      "parameters": {
+        "responseCode": "200",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "http-response",
+      "name": "HTTP Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1250, 300],
+      "notes": "Palauttaa vastauksen käyttäjälle"
+    }
+  ],
+  "connections": {
+    "webhook-trigger": {
+      "main": [
+        [
+          {
+            "node": "fetch-products",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "fetch-orders",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "fetch-products": {
+      "main": [
+        [
+          {
+            "node": "prepare-context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "fetch-orders": {
+      "main": [
+        [
+          {
+            "node": "prepare-context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "prepare-context": {
+      "main": [
+        [
+          {
+            "node": "llm-analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "llm-analysis": {
+      "main": [
+        [
+          {
+            "node": "format-response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "format-response": {
+      "main": [
+        [
+          {
+            "node": "http-response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "versionId": "11c4c6a5-80f1-4d4f-8f5e-2c3c0c5e5e5e",
+  "id": "mycashflow-reporter-workflow"
+}
