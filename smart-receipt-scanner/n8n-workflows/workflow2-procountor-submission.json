@@ -1,0 +1,120 @@
+{
+  "name": "Submit to Procountor",
+  "description": "Submits verified receipt data to Procountor API as purchase invoice",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "procountor-submit",
+        "responseMode": "onReceived",
+        "method": "POST",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [100, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://api.procountor.com/api/v1/invoices",
+        "method": "POST",
+        "authentication": "generic",
+        "options": {},
+        "headers": {
+          "Authorization": "Bearer={{ $env.PROCOUNTOR_ACCESS_TOKEN }}",
+          "Accept": "application/json",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "contentType": "application/json",
+          "values": {
+            "invoiceType": "PURCHASE_INVOICE",
+            "invoiceStatus": "DRAFT",
+            "invoiceDate": "={{ $json.paivays }}",
+            "dueDate": "={{ $json.paivays }}",
+            "supplier": {
+              "name": "={{ $json.ostopaikka }}"
+            },
+            "invoiceLines": [
+              {
+                "description": "Kuittista luetut ostokset",
+                "unitPrice": "={{ parseFloat($json.summa_yhteensa) }}",
+                "quantity": 1,
+                "vatPercent": "={{ parseFloat($json.alv_prosentti) }}"
+              }
+            ],
+            "totalAmount": "={{ parseFloat($json.summa_yhteensa) }}",
+            "vatAmount": "={{ parseFloat($json.alv_summa) }}"
+          }
+        }
+      },
+      "id": "http-procountor",
+      "name": "Submit to Procountor API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [350, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "return {\n  success: $json.id ? true : false,\n  invoiceId: $json.id || null,\n  message: $json.id ? 'Lasku lähetetty onnistuneesti Procountoriin' : 'Virhe laskun lähettämisessä'\n};"
+      },
+      "id": "format-response",
+      "name": "Format Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [550, 300]
+    },
+    {
+      "parameters": {
+        "responseBody": "={{ $json }}",
+        "responseCode": "={{ $json.success ? 200 : 400 }}"
+      },
+      "id": "webhook-response",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [750, 300]
+    }
+  ],
+  "connections": {
+    "webhook-trigger": {
+      "main": [
+        [
+          {
+            "node": "http-procountor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "http-procountor": {
+      "main": [
+        [
+          {
+            "node": "format-response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "format-response": {
+      "main": [
+        [
+          {
+            "node": "webhook-response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {},
+  "staticData": null,
+  "createdAt": "2025-11-10T00:00:00.000Z",
+  "updatedAt": "2025-11-10T00:00:00.000Z"
+}
