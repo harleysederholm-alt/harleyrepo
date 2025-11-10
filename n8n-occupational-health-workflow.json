@@ -1,0 +1,381 @@
+{
+  "name": "Occupational Health Invoice Analysis & Substitute Work Process",
+  "nodes": [
+    {
+      "parameters": {
+        "mailbox": "INBOX",
+        "additionalFields": {
+          "readEmails": true
+        }
+      },
+      "id": "email-trigger-imap",
+      "name": "Email Trigger - Invoice",
+      "type": "n8n-nodes-base.emailReadImap",
+      "typeVersion": 1,
+      "position": [
+        250,
+        150
+      ],
+      "credentials": {
+        "imapEmail": "imap_occupational_health"
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.subject }}",
+              "condition": "contains",
+              "value2": "Lasku"
+            }
+          ]
+        }
+      },
+      "id": "check-email-type",
+      "name": "IF: Is Invoice?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        500,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $credentials.anthropic.apiKey }}"
+            },
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "application/json",
+        "body": "={\n  \"model\": \"claude-3-5-sonnet-20241022\",\n  \"max_tokens\": 1024,\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"Olet suomalainen työterveyslaskujen analyytikko. Analysoi seuraava lasku ja palauta VAIN JSON-muotoinen objekti ilman muita tekstejä.\\n\\nSOPIMUSEHDOT:\\n- Käyntimaksu (Yleislääkäri): 50 EUR\\n- Kategoria K1 (Lakisääteinen): Kuuluu sopimukseen\\n- Kategoria K2 (Vapaaehtoinen): Ei kuulu sopimukseen\\n\\nLaskun sisältö:\\n{{ $json.body }}\\n\\nPalauta JSON tässä muodossa:\\n{\\\"laskun_loppusumma\\\": 0.00, \\\"erittely\\\": [], \\\"poikkeamat\\\": [], \\\"yhteenveto_poikkeamista\\\": \\\"\\\"}\"\n    }\n  ]\n}"
+      },
+      "id": "claude-analyze-invoice",
+      "name": "Claude: Analyze Invoice",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        750,
+        50
+      ],
+      "credentials": {
+        "httpHeaderAuth": "anthropic_api_key"
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsonParse": true,
+        "dataPropertyName": "data"
+      },
+      "id": "extract-claude-response",
+      "name": "Extract: Claude Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        50
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.data.content[0].text }}",
+              "condition": "notEmpty"
+            }
+          ]
+        }
+      },
+      "id": "check-discrepancies",
+      "name": "IF: Has Discrepancies?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        50
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "{{ $credentials.smtpEmail.user }}",
+        "toEmail": "[email protected]",
+        "subject": "⚠️ Työterveyslaskussa poikkeama havaittu",
+        "emailType": "text",
+        "textPlain": "Hei,\n\nTyöterveyslaskussa on havaittu poikkeama sopimuksen ehtoihin nähden:\n\n{{ $json.data.content[0].text }}\n\nOiginaalisen sähköpostin lähettäjä: {{ $json.from }}\nAihe: {{ $json.subject }}\n\nKäsittele tämä raportti viipymättä.\n\nYstävällisin terveisiin,\nAutomatisoitu Työterveys-avustaja"
+      },
+      "id": "email-alert-discrepancy",
+      "name": "Email: Alert on Discrepancy",
+      "type": "n8n-nodes-base.emailSendSmtp",
+      "typeVersion": 2,
+      "position": [
+        1500,
+        50
+      ],
+      "credentials": {
+        "smtp": "smtp_occupational_health"
+      }
+    },
+    {
+      "parameters": {
+        "channel": "#occupational-health",
+        "text": "🏥 Työterveyslaskussa poikkeama havaittu:\n\n{{ $json.data.content[0].text }}"
+      },
+      "id": "slack-alert-optional",
+      "name": "Slack: Optional Alert",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2,
+      "position": [
+        1500,
+        150
+      ],
+      "credentials": {
+        "slackApi": "slack_occupational_health"
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "substitute-work",
+        "responseMode": "responseNode",
+        "responseBinaryPropertyName": "data"
+      },
+      "id": "webhook-substitute-work",
+      "name": "Webhook: Substitute Work Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        250,
+        350
+      ],
+      "webhookId": "substitute_work_webhook"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.subject }}",
+              "condition": "contains",
+              "value2": "korvaava työ"
+            }
+          ]
+        }
+      },
+      "id": "check-substitute-work",
+      "name": "IF: Substitute Work?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        500,
+        350
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "{{ $credentials.smtpEmail.user }}",
+        "toEmail": "={{ $json.employeeEmail || '[email protected]' }}",
+        "subject": "📋 Korvaavan työn suunnittelu - Ohjeet",
+        "emailType": "html",
+        "htmlEmail": "<html><body><h2>Hei {{ $json.employeeName || 'työntekijä' }},</h2><p>Sinulle on määrätty korvaavaa työtä terveydellisista syistä. Tässä on ohjeet seuraavalle osallistua suunnitteluun:</p><ol><li>Täytä liitteessä oleva korvaavan työn suunnittelulomake</li><li>Konsultoi lääkäriäsi työn vaatimuksista</li><li>Lähetä lomake takaisin esimiehellesi 5 päivän sisällä</li></ol><p>Kysymysten sattuessa ota yhteyttä:</p><p>Email: [email protected]<br>Puhelin: +358-XX-XXXXXX</p><p>Ystävällisin terveisiin,<br>Työterveys-yksikkö</p></body></html>"
+      },
+      "id": "email-employee-form",
+      "name": "Email: Send Form to Employee",
+      "type": "n8n-nodes-base.emailSendSmtp",
+      "typeVersion": 2,
+      "position": [
+        750,
+        300
+      ],
+      "credentials": {
+        "smtp": "smtp_occupational_health"
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "{{ $credentials.smtpEmail.user }}",
+        "toEmail": "={{ $json.managerEmail || '[email protected]' }}",
+        "subject": "📋 Korvaavan työn suunnittelu - {{ $json.employeeName }}",
+        "emailType": "html",
+        "htmlEmail": "<html><body><h2>Hei esimies,</h2><p>Alla olevan työntekijän kohdalla on aloitettu korvaavan työn suunnitteluprosessi:</p><p><strong>Työntekijä:</strong> {{ $json.employeeName }}<br><strong>Osasto:</strong> {{ $json.department || 'N/A' }}<br><strong>Email:</strong> {{ $json.employeeEmail }}</p><p>Prosessin vaiheet:</p><ol><li>Työntekijälle lähetetään suunnittelulomake</li><li>Yhteinen palaveri sinun, työntekijän ja occupational health -ammattilaisen kanssa</li><li>Sopimuksen allekirjoitus ja toteutussuunnitelma</li></ol><p>Seuraava vaihe 5 päivän kuluttua.</p><p>Ystävällisin terveisiin,<br>Työterveys-yksikkö</p></body></html>"
+      },
+      "id": "email-manager-notification",
+      "name": "Email: Notify Manager",
+      "type": "n8n-nodes-base.emailSendSmtp",
+      "typeVersion": 2,
+      "position": [
+        750,
+        400
+      ],
+      "credentials": {
+        "smtp": "smtp_occupational_health"
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "name": "processStatus",
+              "value": "=completed"
+            },
+            {
+              "name": "timestamp",
+              "value": "={{ new Date().toISOString() }}"
+            }
+          ]
+        }
+      },
+      "id": "finalize-substitute-work",
+      "name": "Set: Process Complete",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        350
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "webhook-response",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1250,
+        350
+      ]
+    }
+  ],
+  "connections": {
+    "email-trigger-imap": {
+      "main": [
+        [
+          {
+            "node": "check-email-type",
+            "index": 0,
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "check-email-type": {
+      "main": [
+        [
+          {
+            "node": "claude-analyze-invoice",
+            "index": 0,
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "claude-analyze-invoice": {
+      "main": [
+        [
+          {
+            "node": "extract-claude-response",
+            "index": 0,
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "extract-claude-response": {
+      "main": [
+        [
+          {
+            "node": "check-discrepancies",
+            "index": 0,
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "check-discrepancies": {
+      "main": [
+        [
+          {
+            "node": "email-alert-discrepancy",
+            "index": 0,
+            "type": "main"
+          },
+          {
+            "node": "slack-alert-optional",
+            "index": 0,
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "webhook-substitute-work": {
+      "main": [
+        [
+          {
+            "node": "check-substitute-work",
+            "index": 0,
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "check-substitute-work": {
+      "main": [
+        [
+          {
+            "node": "email-employee-form",
+            "index": 0,
+            "type": "main"
+          },
+          {
+            "node": "email-manager-notification",
+            "index": 0,
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "email-employee-form": {
+      "main": [
+        [
+          {
+            "node": "finalize-substitute-work",
+            "index": 0,
+            "type": "main"
+          }
+        ]
+      ]
+    },
+    "finalize-substitute-work": {
+      "main": [
+        [
+          {
+            "node": "webhook-response",
+            "index": 0,
+            "type": "main"
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
