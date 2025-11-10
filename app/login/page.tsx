@@ -1,135 +1,108 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { Auth } from '@supabase/auth-ui-react';
-import { ThemeSupa } from '@supabase/auth-ui-shared';
-import { supabase } from '@/lib/supabase/client';
-import { APP_NAME } from '@/lib/constants';
-import { Target } from 'lucide-react';
+import { useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import { createClient } from '@/lib/supabase/browser';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { AlertCircle, Loader2 } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
-  const [loading, setLoading] = useState(true);
+  const searchParams = useSearchParams();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    // Tarkista onko käyttäjä jo kirjautunut
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        router.push('/dashboard');
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) {
+        setError(error.message);
       } else {
-        setLoading(false);
+        router.push(searchParams.get('redirect') || '/dashboard');
       }
-    });
-
-    // Kuuntele auth-muutoksia
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session) {
-        router.push('/dashboard');
-      }
-    });
-
-    return () => subscription.unsubscribe();
-  }, [router]);
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
-      </div>
-    );
-  }
+    } catch (err) {
+      setError('An unexpected error occurred');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary-50 to-white flex flex-col">
-      {/* Header */}
-      <header className="border-b border-gray-200 bg-white">
-        <div className="container mx-auto px-4 py-4">
-          <Link href="/" className="flex items-center space-x-2 w-fit">
-            <Target className="h-8 w-8 text-primary-600" />
-            <h1 className="text-2xl font-bold text-gray-900">{APP_NAME}</h1>
-          </Link>
-        </div>
-      </header>
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 to-slate-800 p-4">
+      <Card className="w-full max-w-md">
+        <CardHeader>
+          <CardTitle>NexusBoard Login</CardTitle>
+          <CardDescription>Enter your credentials to sign in</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleLogin} className="space-y-4">
+            {error && (
+              <div className="flex items-center gap-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <AlertCircle className="h-4 w-4 text-red-600" />
+                <p className="text-sm text-red-700">{error}</p>
+              </div>
+            )}
 
-      {/* Login Form */}
-      <div className="flex-1 flex items-center justify-center px-4 py-12">
-        <div className="w-full max-w-md">
-          <div className="card">
-            <div className="text-center mb-8">
-              <h2 className="text-3xl font-bold text-gray-900 mb-2">
-                Tervetuloa takaisin!
-              </h2>
-              <p className="text-gray-600">
-                Kirjaudu sisään nähdäksesi relevantit pienhankintailmoitukset
-              </p>
+            <div className="space-y-2">
+              <label htmlFor="email" className="text-sm font-medium">
+                Email
+              </label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="you@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                disabled={loading}
+                required
+              />
             </div>
 
-            <Auth
-              supabaseClient={supabase}
-              appearance={{
-                theme: ThemeSupa,
-                variables: {
-                  default: {
-                    colors: {
-                      brand: '#0ea5e9',
-                      brandAccent: '#0284c7',
-                    },
-                  },
-                },
-              }}
-              localization={{
-                variables: {
-                  sign_in: {
-                    email_label: 'Sähköposti',
-                    password_label: 'Salasana',
-                    email_input_placeholder: 'oma@yritys.fi',
-                    password_input_placeholder: 'Salasanasi',
-                    button_label: 'Kirjaudu sisään',
-                    loading_button_label: 'Kirjaudutaan...',
-                    social_provider_text: 'Kirjaudu {{provider}}',
-                    link_text: 'Onko sinulla jo tili? Kirjaudu sisään',
-                  },
-                  sign_up: {
-                    email_label: 'Sähköposti',
-                    password_label: 'Salasana',
-                    email_input_placeholder: 'oma@yritys.fi',
-                    password_input_placeholder: 'Luo vahva salasana',
-                    button_label: 'Rekisteröidy',
-                    loading_button_label: 'Rekisteröidään...',
-                    social_provider_text: 'Rekisteröidy {{provider}}',
-                    link_text: 'Ei tiliä? Rekisteröidy',
-                  },
-                  forgotten_password: {
-                    email_label: 'Sähköposti',
-                    password_label: 'Salasana',
-                    email_input_placeholder: 'oma@yritys.fi',
-                    button_label: 'Lähetä palautuslinkki',
-                    loading_button_label: 'Lähetetään...',
-                    link_text: 'Unohditko salasanasi?',
-                  },
-                },
-              }}
-              providers={[]}
-              redirectTo={`${process.env.NEXT_PUBLIC_APP_URL}/dashboard`}
-            />
-
-            <div className="mt-6 text-center text-sm text-gray-600">
-              Rekisteröitymällä hyväksyt{' '}
-              <a href="#" className="text-primary-600 hover:underline">
-                käyttöehdot
-              </a>{' '}
-              ja{' '}
-              <a href="#" className="text-primary-600 hover:underline">
-                tietosuojaselosteen
-              </a>
+            <div className="space-y-2">
+              <label htmlFor="password" className="text-sm font-medium">
+                Password
+              </label>
+              <Input
+                id="password"
+                type="password"
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                disabled={loading}
+                required
+              />
             </div>
+
+            <Button type="submit" className="w-full" disabled={loading}>
+              {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {loading ? 'Signing in...' : 'Sign In'}
+            </Button>
+          </form>
+
+          <div className="mt-6 border-t pt-4">
+            <p className="text-sm text-center text-slate-600">
+              Don't have an account?{' '}
+              <Link href="/signup" className="text-blue-600 hover:underline font-medium">
+                Sign up
+              </Link>
+            </p>
           </div>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
