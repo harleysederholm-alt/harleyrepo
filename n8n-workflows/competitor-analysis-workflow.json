@@ -1,0 +1,334 @@
+{
+  "name": "Kilpailija-analyysi-Agentti",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "number": 1,
+              "unit": "week"
+            }
+          ]
+        }
+      },
+      "id": "schedule",
+      "name": "Schedule",
+      "type": "n8n-nodes-base.Schedule",
+      "typeVersion": 1,
+      "position": [250, 100],
+      "disabled": false
+    },
+    {
+      "parameters": {
+        "jsCode": "const competitors = [\n  {\n    name: \"Kilpailija A\",\n    url: \"https://kilpailija-a.fi/blogi\"\n  },\n  {\n    name: \"Kilpailija B\",\n    url: \"https://kilpailija-b.fi/uutiset\"\n  }\n];\n\nreturn competitors.map(c => ({\n  json: c\n}));"
+      },
+      "id": "define_competitors",
+      "name": "Määritelmät",
+      "type": "n8n-nodes-base.Code",
+      "typeVersion": 2,
+      "position": [450, 100],
+      "disabled": false
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {
+          "reset": false
+        }
+      },
+      "id": "split_batches",
+      "name": "Split in Batches",
+      "type": "n8n-nodes-base.SplitInBatches",
+      "typeVersion": 3,
+      "position": [650, 100],
+      "disabled": false
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "method": "GET",
+        "options": {
+          "timeout": 30000,
+          "followRedirects": true
+        }
+      },
+      "id": "http_request_scrape",
+      "name": "Skreippaa sisältö",
+      "type": "n8n-nodes-base.HttpRequest",
+      "typeVersion": 4.1,
+      "position": [850, 80],
+      "disabled": false
+    },
+    {
+      "parameters": {
+        "sourceData": "html",
+        "extractFields": [
+          {
+            "key": "title",
+            "extractValue": "//h2/text() | //h3/text() | //article/a/text()"
+          },
+          {
+            "key": "link",
+            "extractValue": "//article/a/@href | //h2/../@href"
+          }
+        ]
+      },
+      "id": "html_extract",
+      "name": "HTML Extract",
+      "type": "n8n-nodes-base.HtmlExtract",
+      "typeVersion": 1,
+      "position": [1050, 80],
+      "disabled": false
+    },
+    {
+      "parameters": {
+        "filePath": "./data/={{ $json.name }}_data.json",
+        "options": {}
+      },
+      "id": "read_old_data",
+      "name": "Lue vanha data",
+      "type": "n8n-nodes-base.ReadFile",
+      "typeVersion": 1,
+      "position": [1050, 250],
+      "disabled": false,
+      "onError": "continueErrorHandling"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Lue uusi data edellisen noden tuloksesta\nconst newItems = $json;\nconst name = inputs[0][0].json.name;\n\n// Yritä lukea vanhaa dataa\nlet oldItems = [];\ntry {\n  // Tämä on yksinkertaistettu - todellisessa käytössä vanha data tulee ReadFile:sta\n  if (inputs[1] && inputs[1][0]) {\n    oldItems = JSON.parse(inputs[1][0].data).items || [];\n  }\n} catch (e) {\n  // Ensimmäisellä ajokerralla ei vanhaa dataa\n  oldItems = [];\n}\n\n// Tunnista uudet itemit vertailemalla linkkejä\nconst oldLinks = oldItems.map(item => item.link);\nconst newItemsList = newItems.filter(item => \n  item.link && !oldLinks.includes(item.link)\n);\n\nreturn [{\n  json: {\n    name: name,\n    new_items: newItemsList,\n    timestamp: new Date().toISOString(),\n    all_items: newItems\n  }\n}];"
+      },
+      "id": "compare_data",
+      "name": "Vertaa ja tunnista",
+      "type": "n8n-nodes-base.Code",
+      "typeVersion": 2,
+      "position": [1250, 150],
+      "disabled": false
+    },
+    {
+      "parameters": {
+        "filePath": "./data/={{ $json.name }}_data.json",
+        "dataPropertyName": "all_items",
+        "options": {
+          "overwrite": true
+        }
+      },
+      "id": "write_new_data",
+      "name": "Tallenna uusi data",
+      "type": "n8n-nodes-base.WriteFile",
+      "typeVersion": 1,
+      "position": [1250, 350],
+      "disabled": false
+    },
+    {
+      "parameters": {
+        "loopButton": {
+          "expression": "={{ $nodeVersion < 3.3 ? $json.success : true }}",
+          "value": true
+        }
+      },
+      "id": "loop_control",
+      "name": "Loop Control",
+      "type": "n8n-nodes-base.IfV2",
+      "typeVersion": 2,
+      "position": [1250, 500],
+      "disabled": false
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineByFields": [],
+        "options": {
+          "deep": true
+        }
+      },
+      "id": "merge_results",
+      "name": "Yhdistä tulokset",
+      "type": "n8n-nodes-base.Merge",
+      "typeVersion": 2,
+      "position": [1450, 200],
+      "disabled": false
+    },
+    {
+      "parameters": {
+        "messages": {
+          "messageValues": [
+            {
+              "content": "Tässä ovat tämän viikon muutokset kilpailijoiden sivuilla:\n\n{{ $json | json.stringify() }}\n\nKirjoita \"Kilpailijaraportti VK {{ $now.week }}\" tälle viikolle. Listaa vain ne kilpailijat, joilla on uusia sisältöjä."
+            }
+          ]
+        },
+        "systemPromptType": "custom",
+        "systemPrompt": "Olet suomalainen markkinatutkimusassistentti. Tehtäväsi on kirjoittaa johdolle lyhyt, informatiivinen \"Kilpailijaraportti\" perustuen annettuun dataan.\n\n- Listaa vain ne kilpailijat, joilla on muutoksia.\n- Älä ole turhan puhelias.\n- Käytä selkeää suomen kieltä.\n- Palauta VAIN raportin teksti ilman ylimääräisiä muotoiluja.",
+        "model": "claude-opus",
+        "options": {
+          "temperature": 0.7
+        }
+      },
+      "id": "claude_summary",
+      "name": "Claude-yhteenveto",
+      "type": "n8n-nodes-base.Anthropic",
+      "typeVersion": 1,
+      "position": [1650, 200],
+      "disabled": false,
+      "credentials": {
+        "anthropicApi": "anthropic_api"
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "noreply@company.fi",
+        "toEmail": "johtaja@company.fi",
+        "subject": "Kilpailijaraportti VK {{ $now.week }}",
+        "textContent": "{{ $json.message[0].content }}"
+      },
+      "id": "send_email",
+      "name": "Lähetä sähköposti",
+      "type": "n8n-nodes-base.EmailSend",
+      "typeVersion": 1,
+      "position": [1850, 200],
+      "disabled": false,
+      "credentials": {
+        "smtp": "smtp_credentials"
+      }
+    }
+  ],
+  "connections": {
+    "schedule": {
+      "main": [
+        [
+          {
+            "node": "define_competitors",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "define_competitors": {
+      "main": [
+        [
+          {
+            "node": "split_batches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "split_batches": {
+      "main": [
+        [
+          {
+            "node": "http_request_scrape",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "read_old_data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "http_request_scrape": {
+      "main": [
+        [
+          {
+            "node": "html_extract",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "html_extract": {
+      "main": [
+        [
+          {
+            "node": "compare_data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "read_old_data": {
+      "main": [
+        [
+          {
+            "node": "compare_data",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "compare_data": {
+      "main": [
+        [
+          {
+            "node": "write_new_data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "write_new_data": {
+      "main": [
+        [
+          {
+            "node": "loop_control",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "loop_control": {
+      "main": [
+        [
+          {
+            "node": "split_batches",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "merge_results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "merge_results": {
+      "main": [
+        [
+          {
+            "node": "claude_summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "claude_summary": {
+      "main": [
+        [
+          {
+            "node": "send_email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {},
+  "versionId": "d8b6e6ef-88d9-4ed4-9aa5-6f72e56d7b40"
+}
