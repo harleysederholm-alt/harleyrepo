@@ -132,8 +132,10 @@ export default function HankintaModal({
                 Huomioitavaa (AI-analyysi)
               </h3>
               <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                <p className="text-gray-800 leading-relaxed">
-                  {hankinta.ai_analysis}
+                <p className="text-gray-800 leading-relaxed whitespace-pre-wrap">
+                  {typeof hankinta.ai_analysis === 'string'
+                    ? hankinta.ai_analysis
+                    : JSON.stringify(hankinta.ai_analysis, null, 2)}
                 </p>
               </div>
             </div>
@@ -145,7 +147,7 @@ export default function HankintaModal({
               Alkuperäinen ilmoitus
             </h3>
             <a
-              href={hankinta.linkki_lahteeseen}
+              href={hankinta.source_url}
               target="_blank"
               rel="noopener noreferrer"
               className="btn-primary inline-flex items-center"
@@ -218,17 +220,7 @@ export default function HankintaModal({
             )}
           </div>
 
-          {/* Raakadata (Debug - piilota tuotannossa) */}
-          {process.env.NODE_ENV === 'development' && hankinta.raakadata && (
-            <details className="text-xs">
-              <summary className="cursor-pointer text-gray-500 font-mono">
-                [Debug] Raakadata
-              </summary>
-              <pre className="bg-gray-100 p-3 rounded mt-2 overflow-x-auto">
-                {JSON.stringify(hankinta.raakadata, null, 2)}
-              </pre>
-            </details>
-          )}
+          {/* Debug raw data section removed - field doesn't exist in schema */}
         </div>
 
         {/* Footer */}

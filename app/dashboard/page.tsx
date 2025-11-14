@@ -556,9 +556,9 @@ export default function DashboardPage() {
                   <button className="px-4 py-2.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 text-sm">
                     Merkitse kiinnostavaksi
                   </button>
-                  {selectedHankinta.linkki_lahteeseen && (
+                  {selectedHankinta.source_url && (
                     <a
-                      href={selectedHankinta.linkki_lahteeseen}
+                      href={selectedHankinta.source_url}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="px-4 py-2.5 rounded-lg border border-blue-200 hover:bg-blue-50 text-sm text-center"
