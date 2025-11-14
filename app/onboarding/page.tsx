@@ -35,7 +35,7 @@ export default function OnboardingPage() {
         .from('profiles')
         .select('*')
         .eq('id', session.user.id)
-        .single();
+        .maybeSingle();
 
       if (profile?.ai_profiili_kuvaus) {
         // Profiili jo olemassa, ohjaa dashboardiin
@@ -76,12 +76,15 @@ export default function OnboardingPage() {
 
       const { error } = await supabase
         .from('profiles')
-        .update({
+        .upsert({
+          id: session.user.id,
+          email: session.user.email,
           paikkakunnat,
           toimialat,
           ai_profiili_kuvaus: aiProfiiliKuvaus,
-        })
-        .eq('id', session.user.id);
+        }, {
+          onConflict: 'id'
+        });
 
       if (error) throw error;
 
