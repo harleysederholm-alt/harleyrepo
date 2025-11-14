@@ -166,7 +166,7 @@ export default function DashboardPage() {
 
   const last24h = useMemo(() => {
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    return filteredHankinnat.filter(h => new Date(h.published_at) > oneDayAgo).length;
+    return filteredHankinnat.filter(h => h.published_at && new Date(h.published_at) > oneDayAgo).length;
   }, [filteredHankinnat]);
 
   const toggleCategory = (cat: string) => {
