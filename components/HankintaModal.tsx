@@ -17,12 +17,12 @@ export default function HankintaModal({
   profile,
   onClose,
 }: HankintaModalProps) {
-  const daysLeft = hankinta.maarapaiva ? daysUntil(hankinta.maarapaiva) : null;
+  const daysLeft = hankinta.deadline ? daysUntil(hankinta.deadline) : null;
   const [generatingProposal, setGeneratingProposal] = useState(false);
   const [proposal, setProposal] = useState<string | null>(null);
 
   const handleGenerateProposal = async () => {
-    if (!profile?.ai_profiili_kuvaus) {
+    if (!profile?.ai_profile_description) {
       alert('Profiili puuttuu. Täytä profiilisi ensin.');
       return;
     }
@@ -32,7 +32,7 @@ export default function HankintaModal({
     try {
       const result = await generateTarjousluonnos(
         hankinta,
-        profile.ai_profiili_kuvaus
+        profile.ai_profile_description
       );
 
       if (result.success && result.luonnos) {
@@ -60,17 +60,17 @@ export default function HankintaModal({
         {/* Header */}
         <div className="sticky top-0 bg-white border-b border-gray-200 p-6 flex items-start justify-between">
           <div className="flex-1 pr-8">
-            <h2 className="text-2xl font-bold mb-2">{hankinta.otsikko}</h2>
+            <h2 className="text-2xl font-bold mb-2">{hankinta.title}</h2>
             <div className="flex flex-wrap gap-4 text-sm text-gray-600">
               <div className="flex items-center">
                 <MapPin className="h-4 w-4 mr-2" />
-                <span>{hankinta.kunta}</span>
+                <span>{hankinta.organization}</span>
               </div>
-              {hankinta.maarapaiva && (
+              {hankinta.deadline && (
                 <div className="flex items-center">
                   <Calendar className="h-4 w-4 mr-2" />
                   <span>
-                    {formatDateFi(hankinta.maarapaiva)}
+                    {formatDateFi(hankinta.deadline)}
                     {daysLeft !== null && (
                       <span
                         className={`ml-2 font-semibold ${
@@ -100,40 +100,42 @@ export default function HankintaModal({
         {/* Body */}
         <div className="p-6 space-y-6">
           {/* Toimiala */}
-          {hankinta.toimiala_ai && (
+          {hankinta.category && (
             <div>
               <h3 className="text-sm font-semibold text-gray-700 mb-2 flex items-center">
                 <FileText className="h-4 w-4 mr-2" />
                 Toimiala
               </h3>
-              <span className="badge-primary">{hankinta.toimiala_ai}</span>
+              <span className="badge-primary">{hankinta.category}</span>
             </div>
           )}
 
           {/* AI-Tiivistelmä */}
-          {hankinta.tiivistelma_ai && (
+          {hankinta.ai_summary && (
             <div>
               <h3 className="text-sm font-semibold text-gray-700 mb-2">
                 📝 AI-Tiivistelmä
               </h3>
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                 <p className="text-gray-800 leading-relaxed">
-                  {hankinta.tiivistelma_ai}
+                  {hankinta.ai_summary}
                 </p>
               </div>
             </div>
           )}
 
           {/* AI-Riskit */}
-          {hankinta.riskit_ai && (
+          {hankinta.ai_analysis && (
             <div>
               <h3 className="text-sm font-semibold text-gray-700 mb-2 flex items-center">
                 <AlertTriangle className="h-4 w-4 mr-2 text-yellow-600" />
                 Huomioitavaa (AI-analyysi)
               </h3>
               <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                <p className="text-gray-800 leading-relaxed">
-                  {hankinta.riskit_ai}
+                <p className="text-gray-800 leading-relaxed whitespace-pre-wrap">
+                  {typeof hankinta.ai_analysis === 'string'
+                    ? hankinta.ai_analysis
+                    : JSON.stringify(hankinta.ai_analysis, null, 2)}
                 </p>
               </div>
             </div>
@@ -145,7 +147,7 @@ export default function HankintaModal({
               Alkuperäinen ilmoitus
             </h3>
             <a
-              href={hankinta.linkki_lahteeseen}
+              href={hankinta.source_url}
               target="_blank"
               rel="noopener noreferrer"
               className="btn-primary inline-flex items-center"
@@ -154,7 +156,7 @@ export default function HankintaModal({
             </a>
           </div>
 
-          {/* Tarjousapuri (Premium-ominaisuus) */}
+          {/* Tarjousapuri (AGENT-ominaisuus) */}
           <div className="border-t border-gray-200 pt-6">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-semibold text-gray-700 flex items-center">
@@ -162,14 +164,27 @@ export default function HankintaModal({
                 AI-Tarjousapuri
               </h3>
               <span className="badge bg-purple-100 text-purple-800 text-xs">
-                Premium
+                Agent
               </span>
             </div>
             <p className="text-sm text-gray-600 mb-4">
               Generoi ammattimainen tarjousluonnos tämän hankinnan perusteella käyttäen AI:ta.
             </p>
 
-            {!proposal ? (
+            {/* Check if user has Agent plan */}
+            {profile?.plan !== 'agent' ? (
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                <p className="text-sm text-gray-700 mb-3">
+                  🔒 AI-Tarjousapuri on saatavilla vain Agent-tilassa.
+                </p>
+                <a
+                  href="/hinnasto"
+                  className="btn-primary w-full inline-block text-center"
+                >
+                  Päivitä Agent-tilaan →
+                </a>
+              </div>
+            ) : !proposal ? (
               <button
                 onClick={handleGenerateProposal}
                 disabled={generatingProposal}
@@ -218,17 +233,7 @@ export default function HankintaModal({
             )}
           </div>
 
-          {/* Raakadata (Debug - piilota tuotannossa) */}
-          {process.env.NODE_ENV === 'development' && hankinta.raakadata && (
-            <details className="text-xs">
-              <summary className="cursor-pointer text-gray-500 font-mono">
-                [Debug] Raakadata
-              </summary>
-              <pre className="bg-gray-100 p-3 rounded mt-2 overflow-x-auto">
-                {JSON.stringify(hankinta.raakadata, null, 2)}
-              </pre>
-            </details>
-          )}
+          {/* Debug raw data section removed - field doesn't exist in schema */}
         </div>
 
         {/* Footer */}

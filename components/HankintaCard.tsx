@@ -20,9 +20,16 @@ export default function HankintaCard({
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Laske AI-osuvuusprosentti
+    // Laske AI-osuvuusprosentti (vain PRO ja AGENT käyttäjille)
     const calculateMatch = async () => {
-      if (!profile?.ai_profiili_kuvaus || !hankinta.tiivistelma_ai) {
+      // Free plan: ei AI-osuvuusprosenttia
+      if (profile?.plan === 'free') {
+        setLoading(false);
+        setMatchPercentage(null);
+        return;
+      }
+
+      if (!profile?.ai_profile_description || !hankinta.ai_summary) {
         setLoading(false);
         return;
       }
@@ -33,8 +40,8 @@ export default function HankintaCard({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            profiili: profile.ai_profiili_kuvaus,
-            tiivistelma: hankinta.tiivistelma_ai,
+            profiili: profile.ai_profile_description,
+            ai_summary: hankinta.ai_summary,
           }),
         });
 
@@ -53,7 +60,7 @@ export default function HankintaCard({
     calculateMatch();
   }, [profile, hankinta]);
 
-  const daysLeft = hankinta.maarapaiva ? daysUntil(hankinta.maarapaiva) : null;
+  const daysLeft = hankinta.deadline ? daysUntil(hankinta.deadline) : null;
   const matchInfo =
     matchPercentage !== null ? formatMatchPercentage(matchPercentage) : null;
 
@@ -66,6 +73,13 @@ export default function HankintaCard({
       <div className="absolute top-3 right-3">
         {loading ? (
           <div className="animate-pulse bg-gray-200 rounded-full h-12 w-12"></div>
+        ) : profile?.plan === 'free' ? (
+          <div className="flex flex-col items-center bg-gray-100 rounded-lg p-2">
+            <div className="text-2xl font-bold text-gray-400">
+              🔒
+            </div>
+            <div className="text-xs text-gray-500">Pro+</div>
+          </div>
         ) : (
           <div className="flex flex-col items-center">
             <div
@@ -80,21 +94,21 @@ export default function HankintaCard({
 
       {/* Otsikko */}
       <h3 className="text-lg font-semibold mb-3 pr-16 line-clamp-2">
-        {hankinta.otsikko}
+        {hankinta.title}
       </h3>
 
       {/* Metadata */}
       <div className="space-y-2 mb-4">
         <div className="flex items-center text-sm text-gray-600">
           <MapPin className="h-4 w-4 mr-2 text-gray-400" />
-          <span>{hankinta.kunta}</span>
+          <span>{hankinta.organization}</span>
         </div>
 
-        {hankinta.maarapaiva && (
+        {hankinta.deadline && (
           <div className="flex items-center text-sm text-gray-600">
             <Calendar className="h-4 w-4 mr-2 text-gray-400" />
             <span>
-              {formatDateFi(hankinta.maarapaiva)}
+              {formatDateFi(hankinta.deadline)}
               {daysLeft !== null && (
                 <span
                   className={`ml-2 font-semibold ${
@@ -112,18 +126,18 @@ export default function HankintaCard({
           </div>
         )}
 
-        {hankinta.toimiala_ai && (
+        {hankinta.category && (
           <div className="flex items-center text-sm">
             <TrendingUp className="h-4 w-4 mr-2 text-gray-400" />
-            <span className="badge-primary">{hankinta.toimiala_ai}</span>
+            <span className="badge-primary">{hankinta.category}</span>
           </div>
         )}
       </div>
 
       {/* Tiivistelmä (lyhyt esikatselu) */}
-      {hankinta.tiivistelma_ai && (
+      {hankinta.ai_summary && (
         <p className="text-sm text-gray-600 line-clamp-3 mb-4">
-          {hankinta.tiivistelma_ai}
+          {hankinta.ai_summary}
         </p>
       )}
 

@@ -13,6 +13,9 @@ export default function DashboardPage() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [hankinnat, setHankinnat] = useState<Hankinta[]>([]);
   const [selectedHankinta, setSelectedHankinta] = useState<Hankinta | null>(null);
+  const [savedProcurements, setSavedProcurements] = useState<Set<string>>(new Set());
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [shareEmail, setShareEmail] = useState('');
 
   // Filter state
   const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set());
@@ -36,32 +39,54 @@ export default function DashboardPage() {
         return;
       }
 
-      const { data: profileData, error: profileError } = await supabase
+      // Get or create profile
+      let { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', session.user.id)
-        .single();
+        .maybeSingle();
 
-      if (profileError) throw profileError;
+      // If error and not just "no rows", throw it
+      if (profileError && profileError.code !== 'PGRST116') {
+        throw profileError;
+      }
 
-      if (!profileData?.ai_profiili_kuvaus) {
+      // If no profile exists, create one (upsert to avoid conflicts)
+      if (!profileData) {
+        const { data: newProfile, error: createError } = await supabase
+          .from('profiles')
+          .upsert({
+            id: session.user.id,
+            email: session.user.email,
+            plan: 'free'
+          }, {
+            onConflict: 'id'
+          })
+          .select()
+          .single();
+
+        if (createError) {
+          console.error('Error creating profile:', createError);
+          throw createError;
+        }
+        profileData = newProfile;
+      }
+
+      // Check if onboarding is completed
+      if (!profileData?.ai_profile_description && !profileData?.onboarding_completed) {
         router.push('/onboarding');
         return;
       }
 
       setProfile(profileData);
 
-      // FREEMIUM LOGIC: 24h viive Free-käyttäjille
+      // Get all procurements (no time filtering - data already has proper published_at)
       const isPremium = profileData.plan === 'pro' || profileData.plan === 'agent';
-      const timeLimit = isPremium
-        ? new Date(0).toISOString() // Premium: Ei rajoitusta
-        : new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(); // Free: 24h viive
 
       const { data: hankintaData, error: hankintaError } = await supabase
         .from('hankinnat')
         .select('*')
-        .lte('created_at', timeLimit)
-        .order('created_at', { ascending: false })
+        .order('published_at', { ascending: false })
         .limit(isPremium ? 500 : 20); // Premium: 500, Free: 20
 
       if (hankintaError) throw hankintaError;
@@ -91,10 +116,10 @@ export default function DashboardPage() {
 
     // Category filter
     if (selectedCategories.size > 0) {
-      filtered = filtered.filter(h => selectedCategories.has(h.toimiala_ai || 'Muut'));
+      filtered = filtered.filter(h => selectedCategories.has(h.category || 'Muut'));
     }
 
-    // Region filter (using kunta as proxy)
+    // Region filter (using organization as proxy)
     if (selectedRegions.size > 0) {
       filtered = filtered.filter(h => {
         // Simple mapping - in production, have proper region data
@@ -106,17 +131,17 @@ export default function DashboardPage() {
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       filtered = filtered.filter(h =>
-        h.otsikko?.toLowerCase().includes(q) ||
-        h.kunta?.toLowerCase().includes(q) ||
-        h.toimiala_ai?.toLowerCase().includes(q)
+        h.title?.toLowerCase().includes(q) ||
+        h.organization?.toLowerCase().includes(q) ||
+        h.category?.toLowerCase().includes(q)
       );
     }
 
     // Sort
     if (sortBy === 'deadline') {
       filtered.sort((a, b) => {
-        const dateA = a.maarapaiva ? new Date(a.maarapaiva).getTime() : 0;
-        const dateB = b.maarapaiva ? new Date(b.maarapaiva).getTime() : 0;
+        const dateA = a.deadline ? new Date(a.deadline).getTime() : 0;
+        const dateB = b.deadline ? new Date(b.deadline).getTime() : 0;
         return dateA - dateB;
       });
     } else if (sortBy === 'score') {
@@ -135,12 +160,12 @@ export default function DashboardPage() {
 
   const dueToday = useMemo(() => {
     const today = new Date().toDateString();
-    return filteredHankinnat.filter(h => h.maarapaiva && new Date(h.maarapaiva).toDateString() === today).length;
+    return filteredHankinnat.filter(h => h.deadline && new Date(h.deadline).toDateString() === today).length;
   }, [filteredHankinnat]);
 
   const last24h = useMemo(() => {
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    return filteredHankinnat.filter(h => new Date(h.created_at) > oneDayAgo).length;
+    return filteredHankinnat.filter(h => h.published_at && new Date(h.published_at) > oneDayAgo).length;
   }, [filteredHankinnat]);
 
   const toggleCategory = (cat: string) => {
@@ -174,6 +199,26 @@ export default function DashboardPage() {
     if (!dateStr) return 'Ei määräaikaa';
     const date = new Date(dateStr);
     return date.toLocaleDateString('fi-FI', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  };
+
+  const toggleSaveProcurement = (hankintaId: string) => {
+    const newSet = new Set(savedProcurements);
+    if (newSet.has(hankintaId)) {
+      newSet.delete(hankintaId);
+    } else {
+      newSet.add(hankintaId);
+    }
+    setSavedProcurements(newSet);
+    // In production, save to database
+  };
+
+  const handleShareProcurement = async () => {
+    if (!shareEmail || !selectedHankinta) return;
+
+    // In production, send email via API
+    alert(`Hankinta jaettu osoitteeseen: ${shareEmail}`);
+    setShowShareModal(false);
+    setShareEmail('');
   };
 
   if (loading) {
@@ -220,7 +265,10 @@ export default function DashboardPage() {
               <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full font-semibold">{filteredHankinnat.length}</span>
             </button>
 
-            <button className="w-full flex items-center gap-3 px-3 py-3 rounded-lg text-gray-700 hover:bg-blue-50">
+            <button
+              onClick={() => router.push('/alerts')}
+              className="w-full flex items-center gap-3 px-3 py-3 rounded-lg text-gray-700 hover:bg-blue-50"
+            >
               <div className="w-9 h-9 rounded-md bg-gray-100 flex items-center justify-center">
                 <Bell className="w-4 h-4" />
               </div>
@@ -231,15 +279,15 @@ export default function DashboardPage() {
             </button>
 
             <button
-              onClick={() => router.push('/onboarding')}
+              onClick={() => router.push('/profile')}
               className="w-full flex items-center gap-3 px-3 py-3 rounded-lg text-gray-700 hover:bg-blue-50"
             >
               <div className="w-9 h-9 rounded-md bg-gray-100 flex items-center justify-center">
                 <Settings className="w-4 h-4" />
               </div>
               <div className="flex-1 text-left">
-                <div className="text-sm font-medium">Asetukset</div>
-                <div className="text-xs text-gray-500">Profiili</div>
+                <div className="text-sm font-medium">Profiiliasetukset</div>
+                <div className="text-xs text-gray-500">Muokkaa tietojasi</div>
               </div>
             </button>
           </nav>
@@ -442,20 +490,20 @@ export default function DashboardPage() {
                   className="bg-white/80 backdrop-blur-sm border border-blue-100 rounded-xl p-4 shadow-sm hover:shadow-md hover:-translate-y-1 transition-all cursor-pointer"
                 >
                   <div className="flex items-start justify-between gap-2 mb-3">
-                    <h3 className="font-semibold text-gray-900 leading-snug line-clamp-2">{hankinta.otsikko}</h3>
+                    <h3 className="font-semibold text-gray-900 leading-snug line-clamp-2">{hankinta.title}</h3>
                     <span className="text-xs px-2 py-1 bg-gray-100 text-gray-700 rounded-full whitespace-nowrap">
-                      {hankinta.toimiala_ai || 'Muut'}
+                      {hankinta.category || 'Muut'}
                     </span>
                   </div>
                   <div className="space-y-2 text-sm">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2 text-gray-600">
                         <MapPin className="w-4 h-4" />
-                        <span>{hankinta.kunta}</span>
+                        <span>{hankinta.organization}</span>
                       </div>
                       <div className="flex items-center gap-2 text-gray-600">
                         <Calendar className="w-4 h-4" />
-                        <span>{formatDate(hankinta.maarapaiva)}</span>
+                        <span>{formatDate(hankinta.deadline)}</span>
                       </div>
                     </div>
                     <div className="flex items-center justify-between">
@@ -492,11 +540,11 @@ export default function DashboardPage() {
             <div className="p-5 border-b border-gray-100 flex items-start justify-between">
               <div>
                 <div className="text-xs uppercase tracking-wide text-gray-500 mb-1">Hankinta</div>
-                <h2 className="text-xl font-semibold text-gray-900">{selectedHankinta.otsikko}</h2>
+                <h2 className="text-xl font-semibold text-gray-900">{selectedHankinta.title}</h2>
                 <div className="mt-2 flex flex-wrap gap-2 text-sm">
-                  <span className="px-2 py-1 bg-blue-50 border border-blue-200 rounded-md">{selectedHankinta.toimiala_ai || 'Muut'}</span>
-                  <span className="px-2 py-1 bg-gray-50 border border-gray-200 rounded-md">{selectedHankinta.kunta}</span>
-                  <span className="px-2 py-1 bg-blue-50 border border-blue-200 rounded-md">Määräaika: {formatDate(selectedHankinta.maarapaiva)}</span>
+                  <span className="px-2 py-1 bg-blue-50 border border-blue-200 rounded-md">{selectedHankinta.category || 'Muut'}</span>
+                  <span className="px-2 py-1 bg-gray-50 border border-gray-200 rounded-md">{selectedHankinta.organization}</span>
+                  <span className="px-2 py-1 bg-blue-50 border border-blue-200 rounded-md">Määräaika: {formatDate(selectedHankinta.deadline)}</span>
                   <span className="px-2 py-1 bg-blue-50 border border-blue-200 rounded-md">AI-Osuvuus: {selectedHankinta.ai_score}%</span>
                 </div>
               </div>
@@ -512,34 +560,205 @@ export default function DashboardPage() {
             <div className="p-5 space-y-4">
               <div>
                 <h3 className="text-sm font-semibold text-gray-700 mb-2">AI-Tiivistelmä</h3>
-                <p className="text-sm text-gray-700">{selectedHankinta.tiivistelma_ai || 'Ei tiivistelmää saatavilla.'}</p>
+                <p className="text-sm text-gray-700">{selectedHankinta.ai_summary || 'Ei tiivistelmää saatavilla.'}</p>
               </div>
-              {selectedHankinta.riskit_ai && (
+              {selectedHankinta.ai_analysis && (
                 <div>
                   <h3 className="text-sm font-semibold text-gray-700 mb-2">Riskit ja huomiot</h3>
-                  <p className="text-sm text-gray-700">{selectedHankinta.riskit_ai}</p>
+                  <p className="text-sm text-gray-700">
+                    {typeof selectedHankinta.ai_analysis === 'string'
+                      ? selectedHankinta.ai_analysis
+                      : JSON.stringify(selectedHankinta.ai_analysis, null, 2)}
+                  </p>
                 </div>
               )}
+              {/* Contact Information */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
+                  Ota yhteyttä hankintayksikköön
+                </h3>
+                <div className="space-y-3 text-sm">
+                  <div>
+                    <span className="text-gray-600">Organisaatio:</span>
+                    <span className="ml-2 font-medium text-gray-900">{selectedHankinta.organization}</span>
+                  </div>
+
+                  {selectedHankinta.budget_estimate && (
+                    <div>
+                      <span className="text-gray-600">Arvioitu budjetti:</span>
+                      <span className="ml-2 font-medium text-gray-900">
+                        {new Intl.NumberFormat('fi-FI', { style: 'currency', currency: 'EUR' }).format(selectedHankinta.budget_estimate)}
+                      </span>
+                    </div>
+                  )}
+
+                  <div className="border-t border-blue-200 pt-3 mt-3">
+                    <div className="font-medium text-gray-700 mb-2">Yhteystiedot:</div>
+                    {(selectedHankinta as any).contact_email ? (
+                      <div className="flex items-center gap-2 text-blue-600">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                        </svg>
+                        <a href={`mailto:${(selectedHankinta as any).contact_email}`} className="hover:underline">
+                          {(selectedHankinta as any).contact_email}
+                        </a>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 text-blue-600">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                        </svg>
+                        <a href={`mailto:hankinnat@${selectedHankinta.organization.toLowerCase().replace(' kaupunki', '').replace('n ', '')}.fi`} className="hover:underline">
+                          hankinnat@{selectedHankinta.organization.toLowerCase().replace(' kaupunki', '').replace('n ', '')}.fi
+                        </a>
+                      </div>
+                    )}
+                    {(selectedHankinta as any).contact_phone && (
+                      <div className="flex items-center gap-2 text-gray-700 mt-2">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                        </svg>
+                        <a href={`tel:${(selectedHankinta as any).contact_phone}`} className="hover:underline">
+                          {(selectedHankinta as any).contact_phone}
+                        </a>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="border-t border-blue-200 pt-3 mt-3">
+                    <div className="text-xs text-gray-600">
+                      <strong>Lähde:</strong> {selectedHankinta.source_platform || 'HILMA'}
+                    </div>
+                    <p className="text-xs text-gray-500 mt-2">
+                      💡 Klikkaa "Avaa virallinen ilmoitus" nähdäksesi tarkan ilmoituksen ja lisätiedot
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Actions */}
               <div>
-                <h3 className="text-sm font-semibold text-gray-700 mb-2">Toimenpiteet</h3>
-                <div className="flex flex-col md:flex-row gap-2">
-                  <button className="px-4 py-2.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 text-sm">
-                    Merkitse kiinnostavaksi
+                <h3 className="text-sm font-semibold text-gray-700 mb-3">Toimenpiteet</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  <button
+                    onClick={() => toggleSaveProcurement(selectedHankinta.id)}
+                    className={`px-4 py-2.5 rounded-lg text-sm font-medium transition flex items-center justify-center gap-2 ${
+                      savedProcurements.has(selectedHankinta.id)
+                        ? 'bg-blue-600 text-white hover:bg-blue-700'
+                        : 'border border-blue-200 text-blue-700 hover:bg-blue-50'
+                    }`}
+                  >
+                    <svg className="w-4 h-4" fill={savedProcurements.has(selectedHankinta.id) ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                    </svg>
+                    {savedProcurements.has(selectedHankinta.id) ? 'Tallennettu' : 'Merkitse kiinnostavaksi'}
                   </button>
-                  {selectedHankinta.linkki_lahteeseen && (
+
+                  {selectedHankinta.source_url && (
                     <a
-                      href={selectedHankinta.linkki_lahteeseen}
+                      href={selectedHankinta.source_url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="px-4 py-2.5 rounded-lg border border-blue-200 hover:bg-blue-50 text-sm text-center"
+                      className="px-4 py-2.5 rounded-lg border border-blue-200 hover:bg-blue-50 text-sm font-medium text-center flex items-center justify-center gap-2"
                     >
-                      Avaa tarjouspyyntö
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                      </svg>
+                      Avaa virallinen ilmoitus
                     </a>
                   )}
-                  <button className="px-4 py-2.5 rounded-lg border border-blue-200 hover:bg-blue-50 text-sm">
+
+                  <button
+                    onClick={() => setShowShareModal(true)}
+                    className="px-4 py-2.5 rounded-lg border border-blue-200 hover:bg-blue-50 text-sm font-medium flex items-center justify-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                    </svg>
                     Jaa tiimille
                   </button>
+
+                  <button
+                    onClick={() => {
+                      const url = selectedHankinta.source_url || window.location.href;
+                      navigator.clipboard.writeText(url);
+                      alert('Hankinnan linkki kopioitu leikepöydälle!');
+                    }}
+                    className="px-4 py-2.5 rounded-lg border border-blue-200 hover:bg-blue-50 text-sm font-medium flex items-center justify-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                    Kopioi HILMA-linkki
+                  </button>
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Share Modal */}
+      {showShareModal && selectedHankinta && (
+        <div
+          className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50"
+          onClick={() => setShowShareModal(false)}
+        >
+          <div
+            className="w-full max-w-md bg-white rounded-2xl shadow-xl border border-blue-100 p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Jaa hankinta tiimille</h3>
+                <p className="text-sm text-gray-600 mt-1">Lähetä sähköpostilla</p>
+              </div>
+              <button
+                onClick={() => setShowShareModal(false)}
+                className="p-2 rounded-md hover:bg-gray-100"
+              >
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                  <path d="M6 6l12 12M18 6L6 18" strokeWidth="2" strokeLinecap="round"/>
+                </svg>
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <p className="text-sm font-medium text-gray-900">{selectedHankinta.title}</p>
+                <p className="text-xs text-gray-600 mt-1">{selectedHankinta.organization}</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Vastaanottajan sähköposti
+                </label>
+                <input
+                  type="email"
+                  value={shareEmail}
+                  onChange={(e) => setShareEmail(e.target.value)}
+                  placeholder="etunimi.sukunimi@yritys.fi"
+                  className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={handleShareProcurement}
+                  disabled={!shareEmail}
+                  className="flex-1 px-4 py-2.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-sm font-medium"
+                >
+                  Lähetä
+                </button>
+                <button
+                  onClick={() => setShowShareModal(false)}
+                  className="px-4 py-2.5 rounded-lg border border-gray-300 hover:bg-gray-50 text-sm font-medium"
+                >
+                  Peruuta
+                </button>
               </div>
             </div>
           </div>
