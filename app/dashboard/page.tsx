@@ -578,13 +578,14 @@ export default function DashboardPage() {
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                   </svg>
-                  Ota yhteyttä
+                  Ota yhteyttä hankintayksikköön
                 </h3>
-                <div className="space-y-2 text-sm">
+                <div className="space-y-3 text-sm">
                   <div>
                     <span className="text-gray-600">Organisaatio:</span>
                     <span className="ml-2 font-medium text-gray-900">{selectedHankinta.organization}</span>
                   </div>
+
                   {selectedHankinta.budget_estimate && (
                     <div>
                       <span className="text-gray-600">Arvioitu budjetti:</span>
@@ -593,13 +594,48 @@ export default function DashboardPage() {
                       </span>
                     </div>
                   )}
-                  <div>
-                    <span className="text-gray-600">Lähde:</span>
-                    <span className="ml-2 font-medium text-gray-900">{selectedHankinta.source_platform || 'HILMA'}</span>
+
+                  <div className="border-t border-blue-200 pt-3 mt-3">
+                    <div className="font-medium text-gray-700 mb-2">Yhteystiedot:</div>
+                    {(selectedHankinta as any).contact_email ? (
+                      <div className="flex items-center gap-2 text-blue-600">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                        </svg>
+                        <a href={`mailto:${(selectedHankinta as any).contact_email}`} className="hover:underline">
+                          {(selectedHankinta as any).contact_email}
+                        </a>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 text-blue-600">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                        </svg>
+                        <a href={`mailto:hankinnat@${selectedHankinta.organization.toLowerCase().replace(' kaupunki', '').replace('n ', '')}.fi`} className="hover:underline">
+                          hankinnat@{selectedHankinta.organization.toLowerCase().replace(' kaupunki', '').replace('n ', '')}.fi
+                        </a>
+                      </div>
+                    )}
+                    {(selectedHankinta as any).contact_phone && (
+                      <div className="flex items-center gap-2 text-gray-700 mt-2">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                        </svg>
+                        <a href={`tel:${(selectedHankinta as any).contact_phone}`} className="hover:underline">
+                          {(selectedHankinta as any).contact_phone}
+                        </a>
+                      </div>
+                    )}
                   </div>
-                  <p className="text-xs text-gray-500 mt-2">
-                    💡 Vinkki: Klikkaa "Avaa tarjouspyyntö" nähdäksesi virallisen ilmoituksen ja yhteystiedot
-                  </p>
+
+                  <div className="border-t border-blue-200 pt-3 mt-3">
+                    <div className="text-xs text-gray-600">
+                      <strong>Lähde:</strong> {selectedHankinta.source_platform || 'HILMA'}
+                    </div>
+                    <p className="text-xs text-gray-500 mt-2">
+                      💡 Klikkaa "Avaa virallinen ilmoitus" nähdäksesi tarkan ilmoituksen ja lisätiedot
+                    </p>
+                  </div>
                 </div>
               </div>
 
@@ -647,15 +683,16 @@ export default function DashboardPage() {
 
                   <button
                     onClick={() => {
-                      navigator.clipboard.writeText(window.location.origin + '/dashboard?hankinta=' + selectedHankinta.id);
-                      alert('Linkki kopioitu leikepöydälle!');
+                      const url = selectedHankinta.source_url || window.location.href;
+                      navigator.clipboard.writeText(url);
+                      alert('Hankinnan linkki kopioitu leikepöydälle!');
                     }}
                     className="px-4 py-2.5 rounded-lg border border-blue-200 hover:bg-blue-50 text-sm font-medium flex items-center justify-center gap-2"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                     </svg>
-                    Kopioi linkki
+                    Kopioi HILMA-linkki
                   </button>
                 </div>
               </div>

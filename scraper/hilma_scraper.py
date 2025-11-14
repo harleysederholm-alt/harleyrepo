@@ -200,7 +200,9 @@ class HilmaScraper:
                 'source_platform': 'HILMA',
                 'scraped_at': datetime.utcnow().isoformat(),
                 'published_at': (base_date - timedelta(days=published_days_ago)).isoformat(),
-                'category': category
+                'category': category,
+                'contact_email': f'hankinnat@{org.lower()}.fi',
+                'contact_phone': f'+358 9 {i+310} {i+1000}'
             }
 
             procurements.append(procurement)

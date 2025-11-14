@@ -38,6 +38,10 @@ class ProcurementDatabase:
                 'scraped_at': procurement.get('scraped_at', datetime.utcnow().isoformat()),
                 'published_at': procurement.get('published_at', datetime.utcnow().isoformat()),
 
+                # Contact information
+                'contact_email': procurement.get('contact_email'),
+                'contact_phone': procurement.get('contact_phone'),
+
                 # AI analysis fields (will be filled later)
                 'ai_summary': procurement.get('ai_summary'),
                 'ai_analysis': procurement.get('ai_analysis'),
