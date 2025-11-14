@@ -49,3 +49,4 @@ yarn-error.log*
 # n8n local data
 n8n/.n8n/
 n8n/data/
+*.backup*.tsx
