@@ -141,8 +141,8 @@ export default function DashboardPage() {
     // Sort
     if (sortBy === 'deadline') {
       filtered.sort((a, b) => {
-        const dateA = a.maarapaiva ? new Date(a.maarapaiva).getTime() : 0;
-        const dateB = b.maarapaiva ? new Date(b.maarapaiva).getTime() : 0;
+        const dateA = a.deadline ? new Date(a.deadline).getTime() : 0;
+        const dateB = b.deadline ? new Date(b.deadline).getTime() : 0;
         return dateA - dateB;
       });
     } else if (sortBy === 'score') {

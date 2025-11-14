@@ -87,7 +87,7 @@ export default function DashboardPage() {
 
   // Suodata hankinnat käyttäjän paikkakunnilla
   const filteredHankinnat = hankinnat.filter((h) =>
-    profile?.paikkakunnat?.includes(h.kunta)
+    profile?.paikkakunnat?.includes(h.organization)
   );
 
   return (

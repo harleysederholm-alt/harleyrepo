@@ -28,14 +28,14 @@ YRITTÄJÄN PROFIILI:
 ${aiProfiiliKuvaus}
 
 UUSI TARJOUSPYYNTÖ, JOHON VASTATAAN:
-Otsikko: ${hankinta.otsikko}
-Kunta: ${hankinta.kunta}
-Tiivistelmä: ${hankinta.tiivistelma_ai || 'Ei tiivistelmää'}
-Riskit: ${hankinta.riskit_ai || 'Ei riskejä'}
+Otsikko: ${hankinta.title}
+Organisaatio: ${hankinta.organization}
+Tiivistelmä: ${hankinta.ai_summary || 'Ei tiivistelmää'}
+Analyysi: ${hankinta.ai_analysis ? JSON.stringify(hankinta.ai_analysis) : 'Ei analyysiä'}
 
 OHJEET:
 1. Kirjoita ammattimainen, ystävällinen ja myyvä sähköpostiluonnos
-2. Aloita tervehdyksellä (esim. "Hyvä vastaanottaja" tai "Hyvä ${hankinta.kunta}n hankintapalvelu")
+2. Aloita tervehdyksellä (esim. "Hyvä vastaanottaja" tai "Hyvä ${hankinta.organization}n hankintapalvelu")
 3. Viittaa tarjouspyynnön keskeisiin vaatimuksiin
 4. Korosta yrittäjän osaamista ja kokemusta
 5. Mainitse relevantteja aiempia projekteja jos mahdollista
