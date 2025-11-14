@@ -246,7 +246,10 @@ export default function DashboardPage() {
               <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full font-semibold">{filteredHankinnat.length}</span>
             </button>
 
-            <button className="w-full flex items-center gap-3 px-3 py-3 rounded-lg text-gray-700 hover:bg-blue-50">
+            <button
+              onClick={() => router.push('/alerts')}
+              className="w-full flex items-center gap-3 px-3 py-3 rounded-lg text-gray-700 hover:bg-blue-50"
+            >
               <div className="w-9 h-9 rounded-md bg-gray-100 flex items-center justify-center">
                 <Bell className="w-4 h-4" />
               </div>
@@ -257,15 +260,15 @@ export default function DashboardPage() {
             </button>
 
             <button
-              onClick={() => router.push('/onboarding')}
+              onClick={() => router.push('/profile')}
               className="w-full flex items-center gap-3 px-3 py-3 rounded-lg text-gray-700 hover:bg-blue-50"
             >
               <div className="w-9 h-9 rounded-md bg-gray-100 flex items-center justify-center">
                 <Settings className="w-4 h-4" />
               </div>
               <div className="flex-1 text-left">
-                <div className="text-sm font-medium">Asetukset</div>
-                <div className="text-xs text-gray-500">Profiili</div>
+                <div className="text-sm font-medium">Profiiliasetukset</div>
+                <div className="text-xs text-gray-500">Muokkaa tietojasi</div>
               </div>
             </button>
           </nav>

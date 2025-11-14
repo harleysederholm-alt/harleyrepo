@@ -17,9 +17,14 @@ export async function generateTarjousluonnos(
   aiProfiiliKuvaus: string
 ): Promise<{ success: boolean; luonnos?: string; error?: string }> {
   try {
+    console.log('[generateTarjousluonnos] Starting proposal generation...');
+
     if (!process.env.GROQ_API_KEY) {
+      console.error('[generateTarjousluonnos] GROQ_API_KEY missing');
       throw new Error('GROQ_API_KEY puuttuu');
     }
+
+    console.log('[generateTarjousluonnos] API key found, length:', process.env.GROQ_API_KEY.length);
 
     // Rakenna prompt
     const systemPrompt = `Olet suomalainen tarjouskonsultti, joka auttaa pienyrittäjiä. Kirjoitat selkeää ja ammattimaista suomea. Tehtäväsi on luonnostella sähköpostitarjous, joka perustuu tarjouspyyntöön ja yrittäjän omaan liiketoimintakuvaukseen.
@@ -47,6 +52,9 @@ OHJEET:
     const userPrompt = `Kirjoita tarjousluonnos tälle hankinnalle.`;
 
     // Kutsu Groq API:a
+    console.log('[generateTarjousluonnos] Calling Groq API:', GROQ_CONFIG.API_URL);
+    console.log('[generateTarjousluonnos] Using model:', GROQ_CONFIG.PROPOSAL_MODEL);
+
     const response = await fetch(GROQ_CONFIG.API_URL, {
       method: 'POST',
       headers: {
@@ -72,30 +80,41 @@ OHJEET:
       }),
     });
 
+    console.log('[generateTarjousluonnos] Response status:', response.status);
+
     if (!response.ok) {
       const errorText = await response.text();
+      console.error('[generateTarjousluonnos] API error:', errorText);
       throw new Error(`Groq API virhe: ${response.status} ${errorText}`);
     }
 
     const data = await response.json();
+    console.log('[generateTarjousluonnos] Response data received, has choices:', !!data.choices);
+
     const luonnos = data.choices?.[0]?.message?.content;
 
     if (!luonnos) {
+      console.error('[generateTarjousluonnos] No content in response:', data);
       throw new Error('Groq ei palauttanut sisältöä');
     }
+
+    console.log('[generateTarjousluonnos] Success! Generated proposal length:', luonnos.length);
 
     return {
       success: true,
       luonnos,
     };
   } catch (error) {
-    console.error('Virhe generateTarjousluonnos:', error);
+    console.error('[generateTarjousluonnos] Error:', error);
+
+    // More detailed error message
+    const errorMessage = error instanceof Error
+      ? error.message
+      : 'Tuntematon virhe tarjousluonnoksen generoinnissa';
+
     return {
       success: false,
-      error:
-        error instanceof Error
-          ? error.message
-          : 'Tuntematon virhe tarjousluonnoksen generoinnissa',
+      error: errorMessage,
     };
   }
 }
