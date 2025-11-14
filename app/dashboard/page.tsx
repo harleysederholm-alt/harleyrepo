@@ -36,15 +36,41 @@ export default function DashboardPage() {
         return;
       }
 
-      const { data: profileData, error: profileError } = await supabase
+      // Get or create profile
+      let { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', session.user.id)
-        .single();
+        .maybeSingle();
 
-      if (profileError) throw profileError;
+      // If error and not just "no rows", throw it
+      if (profileError && profileError.code !== 'PGRST116') {
+        throw profileError;
+      }
 
-      if (!profileData?.ai_profiili_kuvaus) {
+      // If no profile exists, create one (upsert to avoid conflicts)
+      if (!profileData) {
+        const { data: newProfile, error: createError } = await supabase
+          .from('profiles')
+          .upsert({
+            id: session.user.id,
+            email: session.user.email,
+            plan: 'free'
+          }, {
+            onConflict: 'id'
+          })
+          .select()
+          .single();
+
+        if (createError) {
+          console.error('Error creating profile:', createError);
+          throw createError;
+        }
+        profileData = newProfile;
+      }
+
+      // Check if onboarding is completed
+      if (!profileData?.ai_profile_description && !profileData?.onboarding_completed) {
         router.push('/onboarding');
         return;
       }
@@ -60,8 +86,8 @@ export default function DashboardPage() {
       const { data: hankintaData, error: hankintaError } = await supabase
         .from('hankinnat')
         .select('*')
-        .lte('created_at', timeLimit)
-        .order('created_at', { ascending: false })
+        .lte('published_at', timeLimit)
+        .order('published_at', { ascending: false })
         .limit(isPremium ? 500 : 20); // Premium: 500, Free: 20
 
       if (hankintaError) throw hankintaError;
@@ -91,10 +117,10 @@ export default function DashboardPage() {
 
     // Category filter
     if (selectedCategories.size > 0) {
-      filtered = filtered.filter(h => selectedCategories.has(h.toimiala_ai || 'Muut'));
+      filtered = filtered.filter(h => selectedCategories.has(h.category || 'Muut'));
     }
 
-    // Region filter (using kunta as proxy)
+    // Region filter (using organization as proxy)
     if (selectedRegions.size > 0) {
       filtered = filtered.filter(h => {
         // Simple mapping - in production, have proper region data
@@ -106,9 +132,9 @@ export default function DashboardPage() {
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       filtered = filtered.filter(h =>
-        h.otsikko?.toLowerCase().includes(q) ||
-        h.kunta?.toLowerCase().includes(q) ||
-        h.toimiala_ai?.toLowerCase().includes(q)
+        h.title?.toLowerCase().includes(q) ||
+        h.organization?.toLowerCase().includes(q) ||
+        h.category?.toLowerCase().includes(q)
       );
     }
 
@@ -135,12 +161,12 @@ export default function DashboardPage() {
 
   const dueToday = useMemo(() => {
     const today = new Date().toDateString();
-    return filteredHankinnat.filter(h => h.maarapaiva && new Date(h.maarapaiva).toDateString() === today).length;
+    return filteredHankinnat.filter(h => h.deadline && new Date(h.deadline).toDateString() === today).length;
   }, [filteredHankinnat]);
 
   const last24h = useMemo(() => {
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    return filteredHankinnat.filter(h => new Date(h.created_at) > oneDayAgo).length;
+    return filteredHankinnat.filter(h => new Date(h.published_at) > oneDayAgo).length;
   }, [filteredHankinnat]);
 
   const toggleCategory = (cat: string) => {
@@ -442,20 +468,20 @@ export default function DashboardPage() {
                   className="bg-white/80 backdrop-blur-sm border border-blue-100 rounded-xl p-4 shadow-sm hover:shadow-md hover:-translate-y-1 transition-all cursor-pointer"
                 >
                   <div className="flex items-start justify-between gap-2 mb-3">
-                    <h3 className="font-semibold text-gray-900 leading-snug line-clamp-2">{hankinta.otsikko}</h3>
+                    <h3 className="font-semibold text-gray-900 leading-snug line-clamp-2">{hankinta.title}</h3>
                     <span className="text-xs px-2 py-1 bg-gray-100 text-gray-700 rounded-full whitespace-nowrap">
-                      {hankinta.toimiala_ai || 'Muut'}
+                      {hankinta.category || 'Muut'}
                     </span>
                   </div>
                   <div className="space-y-2 text-sm">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2 text-gray-600">
                         <MapPin className="w-4 h-4" />
-                        <span>{hankinta.kunta}</span>
+                        <span>{hankinta.organization}</span>
                       </div>
                       <div className="flex items-center gap-2 text-gray-600">
                         <Calendar className="w-4 h-4" />
-                        <span>{formatDate(hankinta.maarapaiva)}</span>
+                        <span>{formatDate(hankinta.deadline)}</span>
                       </div>
                     </div>
                     <div className="flex items-center justify-between">
@@ -492,11 +518,11 @@ export default function DashboardPage() {
             <div className="p-5 border-b border-gray-100 flex items-start justify-between">
               <div>
                 <div className="text-xs uppercase tracking-wide text-gray-500 mb-1">Hankinta</div>
-                <h2 className="text-xl font-semibold text-gray-900">{selectedHankinta.otsikko}</h2>
+                <h2 className="text-xl font-semibold text-gray-900">{selectedHankinta.title}</h2>
                 <div className="mt-2 flex flex-wrap gap-2 text-sm">
-                  <span className="px-2 py-1 bg-blue-50 border border-blue-200 rounded-md">{selectedHankinta.toimiala_ai || 'Muut'}</span>
-                  <span className="px-2 py-1 bg-gray-50 border border-gray-200 rounded-md">{selectedHankinta.kunta}</span>
-                  <span className="px-2 py-1 bg-blue-50 border border-blue-200 rounded-md">Määräaika: {formatDate(selectedHankinta.maarapaiva)}</span>
+                  <span className="px-2 py-1 bg-blue-50 border border-blue-200 rounded-md">{selectedHankinta.category || 'Muut'}</span>
+                  <span className="px-2 py-1 bg-gray-50 border border-gray-200 rounded-md">{selectedHankinta.organization}</span>
+                  <span className="px-2 py-1 bg-blue-50 border border-blue-200 rounded-md">Määräaika: {formatDate(selectedHankinta.deadline)}</span>
                   <span className="px-2 py-1 bg-blue-50 border border-blue-200 rounded-md">AI-Osuvuus: {selectedHankinta.ai_score}%</span>
                 </div>
               </div>
@@ -512,12 +538,12 @@ export default function DashboardPage() {
             <div className="p-5 space-y-4">
               <div>
                 <h3 className="text-sm font-semibold text-gray-700 mb-2">AI-Tiivistelmä</h3>
-                <p className="text-sm text-gray-700">{selectedHankinta.tiivistelma_ai || 'Ei tiivistelmää saatavilla.'}</p>
+                <p className="text-sm text-gray-700">{selectedHankinta.ai_summary || 'Ei tiivistelmää saatavilla.'}</p>
               </div>
-              {selectedHankinta.riskit_ai && (
+              {selectedHankinta.ai_analysis && (
                 <div>
                   <h3 className="text-sm font-semibold text-gray-700 mb-2">Riskit ja huomiot</h3>
-                  <p className="text-sm text-gray-700">{selectedHankinta.riskit_ai}</p>
+                  <p className="text-sm text-gray-700">{selectedHankinta.ai_analysis}</p>
                 </div>
               )}
               <div>

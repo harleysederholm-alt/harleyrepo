@@ -34,9 +34,9 @@ CREATE INDEX IF NOT EXISTS idx_profiles_plan ON public.profiles(plan);
 -- =====================================================
 
 CREATE TABLE IF NOT EXISTS public.saved_hankinnat (
-    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-    hankinta_id BIGINT NOT NULL REFERENCES public.hankinnat(id) ON DELETE CASCADE,
+    hankinta_id UUID NOT NULL REFERENCES public.hankinnat(id) ON DELETE CASCADE,
     saved_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     notes TEXT,
     UNIQUE(user_id, hankinta_id)
@@ -175,7 +175,7 @@ CREATE OR REPLACE FUNCTION public.get_hankinnat_for_user(
     p_limit INTEGER DEFAULT 50
 )
 RETURNS TABLE (
-    id BIGINT,
+    id UUID,
     otsikko TEXT,
     kunta TEXT,
     maarapaiva TIMESTAMP WITH TIME ZONE,
