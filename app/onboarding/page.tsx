@@ -37,7 +37,7 @@ export default function OnboardingPage() {
         .eq('id', session.user.id)
         .maybeSingle();
 
-      if (profile?.ai_profiili_kuvaus) {
+      if (profile?.ai_profile_description || profile?.onboarding_completed) {
         // Profiili jo olemassa, ohjaa dashboardiin
         router.push('/dashboard');
       } else {
@@ -74,24 +74,35 @@ export default function OnboardingPage() {
         return;
       }
 
-      const { error } = await supabase
+      // Build AI profile description from selected options
+      const profileDescription = `Toiminta-alueet: ${paikkakunnat.join(', ')}. Toimialat: ${toimialat.join(', ')}. ${aiProfiiliKuvaus}`;
+
+      // Update profile with AI description and mark onboarding complete
+      const { error: updateError } = await supabase
         .from('profiles')
-        .upsert({
-          id: session.user.id,
-          email: session.user.email,
-          paikkakunnat,
-          toimialat,
-          ai_profiili_kuvaus: aiProfiiliKuvaus,
-        }, {
-          onConflict: 'id'
+        .update({
+          ai_profile_description: profileDescription,
+          onboarding_completed: true,
+        })
+        .eq('id', session.user.id);
+
+      if (updateError) {
+        console.error('Supabase error:', {
+          message: updateError.message,
+          details: updateError.details,
+          hint: updateError.hint,
+          code: updateError.code
         });
+        alert(`Virhe tallennettaessa: ${updateError.message}`);
+        setSaving(false);
+        return;
+      }
 
-      if (error) throw error;
-
+      console.log('Profile updated successfully');
       // Onnistui! Ohjaa dashboardiin
       router.push('/dashboard');
     } catch (error) {
-      console.error('Virhe tallennettaessa:', error);
+      console.error('Catch block error:', error);
       alert('Virhe tallennettaessa. Yritä uudelleen.');
       setSaving(false);
     }
