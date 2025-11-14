@@ -543,7 +543,11 @@ export default function DashboardPage() {
               {selectedHankinta.ai_analysis && (
                 <div>
                   <h3 className="text-sm font-semibold text-gray-700 mb-2">Riskit ja huomiot</h3>
-                  <p className="text-sm text-gray-700">{selectedHankinta.ai_analysis}</p>
+                  <p className="text-sm text-gray-700">
+                    {typeof selectedHankinta.ai_analysis === 'string'
+                      ? selectedHankinta.ai_analysis
+                      : JSON.stringify(selectedHankinta.ai_analysis, null, 2)}
+                  </p>
                 </div>
               )}
               <div>
