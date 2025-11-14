@@ -22,7 +22,7 @@ export default function HankintaCard({
   useEffect(() => {
     // Laske AI-osuvuusprosentti
     const calculateMatch = async () => {
-      if (!profile?.ai_profiili_kuvaus || !hankinta.ai_summary) {
+      if (!profile?.ai_profile_description || !hankinta.ai_summary) {
         setLoading(false);
         return;
       }
@@ -33,7 +33,7 @@ export default function HankintaCard({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            profiili: profile.ai_profiili_kuvaus,
+            profiili: profile.ai_profile_description,
             ai_summary: hankinta.ai_summary,
           }),
         });

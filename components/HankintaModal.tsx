@@ -22,7 +22,7 @@ export default function HankintaModal({
   const [proposal, setProposal] = useState<string | null>(null);
 
   const handleGenerateProposal = async () => {
-    if (!profile?.ai_profiili_kuvaus) {
+    if (!profile?.ai_profile_description) {
       alert('Profiili puuttuu. Täytä profiilisi ensin.');
       return;
     }
@@ -32,7 +32,7 @@ export default function HankintaModal({
     try {
       const result = await generateTarjousluonnos(
         hankinta,
-        profile.ai_profiili_kuvaus
+        profile.ai_profile_description
       );
 
       if (result.success && result.luonnos) {
