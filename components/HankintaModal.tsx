@@ -156,7 +156,7 @@ export default function HankintaModal({
             </a>
           </div>
 
-          {/* Tarjousapuri (Premium-ominaisuus) */}
+          {/* Tarjousapuri (AGENT-ominaisuus) */}
           <div className="border-t border-gray-200 pt-6">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-semibold text-gray-700 flex items-center">
@@ -164,14 +164,27 @@ export default function HankintaModal({
                 AI-Tarjousapuri
               </h3>
               <span className="badge bg-purple-100 text-purple-800 text-xs">
-                Premium
+                Agent
               </span>
             </div>
             <p className="text-sm text-gray-600 mb-4">
               Generoi ammattimainen tarjousluonnos tämän hankinnan perusteella käyttäen AI:ta.
             </p>
 
-            {!proposal ? (
+            {/* Check if user has Agent plan */}
+            {profile?.plan !== 'agent' ? (
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                <p className="text-sm text-gray-700 mb-3">
+                  🔒 AI-Tarjousapuri on saatavilla vain Agent-tilassa.
+                </p>
+                <a
+                  href="/hinnasto"
+                  className="btn-primary w-full inline-block text-center"
+                >
+                  Päivitä Agent-tilaan →
+                </a>
+              </div>
+            ) : !proposal ? (
               <button
                 onClick={handleGenerateProposal}
                 disabled={generatingProposal}

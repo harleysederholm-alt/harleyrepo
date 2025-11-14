@@ -20,8 +20,15 @@ export default function HankintaCard({
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Laske AI-osuvuusprosentti
+    // Laske AI-osuvuusprosentti (vain PRO ja AGENT käyttäjille)
     const calculateMatch = async () => {
+      // Free plan: ei AI-osuvuusprosenttia
+      if (profile?.plan === 'free') {
+        setLoading(false);
+        setMatchPercentage(null);
+        return;
+      }
+
       if (!profile?.ai_profile_description || !hankinta.ai_summary) {
         setLoading(false);
         return;
@@ -66,6 +73,13 @@ export default function HankintaCard({
       <div className="absolute top-3 right-3">
         {loading ? (
           <div className="animate-pulse bg-gray-200 rounded-full h-12 w-12"></div>
+        ) : profile?.plan === 'free' ? (
+          <div className="flex flex-col items-center bg-gray-100 rounded-lg p-2">
+            <div className="text-2xl font-bold text-gray-400">
+              🔒
+            </div>
+            <div className="text-xs text-gray-500">Pro+</div>
+          </div>
         ) : (
           <div className="flex flex-col items-center">
             <div
