@@ -13,6 +13,9 @@ export default function DashboardPage() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [hankinnat, setHankinnat] = useState<Hankinta[]>([]);
   const [selectedHankinta, setSelectedHankinta] = useState<Hankinta | null>(null);
+  const [savedProcurements, setSavedProcurements] = useState<Set<string>>(new Set());
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [shareEmail, setShareEmail] = useState('');
 
   // Filter state
   const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set());
@@ -196,6 +199,26 @@ export default function DashboardPage() {
     if (!dateStr) return 'Ei määräaikaa';
     const date = new Date(dateStr);
     return date.toLocaleDateString('fi-FI', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  };
+
+  const toggleSaveProcurement = (hankintaId: string) => {
+    const newSet = new Set(savedProcurements);
+    if (newSet.has(hankintaId)) {
+      newSet.delete(hankintaId);
+    } else {
+      newSet.add(hankintaId);
+    }
+    setSavedProcurements(newSet);
+    // In production, save to database
+  };
+
+  const handleShareProcurement = async () => {
+    if (!shareEmail || !selectedHankinta) return;
+
+    // In production, send email via API
+    alert(`Hankinta jaettu osoitteeseen: ${shareEmail}`);
+    setShowShareModal(false);
+    setShareEmail('');
   };
 
   if (loading) {
@@ -549,26 +572,156 @@ export default function DashboardPage() {
                   </p>
                 </div>
               )}
+              {/* Contact Information */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
+                  Ota yhteyttä
+                </h3>
+                <div className="space-y-2 text-sm">
+                  <div>
+                    <span className="text-gray-600">Organisaatio:</span>
+                    <span className="ml-2 font-medium text-gray-900">{selectedHankinta.organization}</span>
+                  </div>
+                  {selectedHankinta.budget_estimate && (
+                    <div>
+                      <span className="text-gray-600">Arvioitu budjetti:</span>
+                      <span className="ml-2 font-medium text-gray-900">
+                        {new Intl.NumberFormat('fi-FI', { style: 'currency', currency: 'EUR' }).format(selectedHankinta.budget_estimate)}
+                      </span>
+                    </div>
+                  )}
+                  <div>
+                    <span className="text-gray-600">Lähde:</span>
+                    <span className="ml-2 font-medium text-gray-900">{selectedHankinta.source_platform || 'HILMA'}</span>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2">
+                    💡 Vinkki: Klikkaa "Avaa tarjouspyyntö" nähdäksesi virallisen ilmoituksen ja yhteystiedot
+                  </p>
+                </div>
+              </div>
+
+              {/* Actions */}
               <div>
-                <h3 className="text-sm font-semibold text-gray-700 mb-2">Toimenpiteet</h3>
-                <div className="flex flex-col md:flex-row gap-2">
-                  <button className="px-4 py-2.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 text-sm">
-                    Merkitse kiinnostavaksi
+                <h3 className="text-sm font-semibold text-gray-700 mb-3">Toimenpiteet</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  <button
+                    onClick={() => toggleSaveProcurement(selectedHankinta.id)}
+                    className={`px-4 py-2.5 rounded-lg text-sm font-medium transition flex items-center justify-center gap-2 ${
+                      savedProcurements.has(selectedHankinta.id)
+                        ? 'bg-blue-600 text-white hover:bg-blue-700'
+                        : 'border border-blue-200 text-blue-700 hover:bg-blue-50'
+                    }`}
+                  >
+                    <svg className="w-4 h-4" fill={savedProcurements.has(selectedHankinta.id) ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                    </svg>
+                    {savedProcurements.has(selectedHankinta.id) ? 'Tallennettu' : 'Merkitse kiinnostavaksi'}
                   </button>
+
                   {selectedHankinta.source_url && (
                     <a
                       href={selectedHankinta.source_url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="px-4 py-2.5 rounded-lg border border-blue-200 hover:bg-blue-50 text-sm text-center"
+                      className="px-4 py-2.5 rounded-lg border border-blue-200 hover:bg-blue-50 text-sm font-medium text-center flex items-center justify-center gap-2"
                     >
-                      Avaa tarjouspyyntö
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                      </svg>
+                      Avaa virallinen ilmoitus
                     </a>
                   )}
-                  <button className="px-4 py-2.5 rounded-lg border border-blue-200 hover:bg-blue-50 text-sm">
+
+                  <button
+                    onClick={() => setShowShareModal(true)}
+                    className="px-4 py-2.5 rounded-lg border border-blue-200 hover:bg-blue-50 text-sm font-medium flex items-center justify-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                    </svg>
                     Jaa tiimille
                   </button>
+
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(window.location.origin + '/dashboard?hankinta=' + selectedHankinta.id);
+                      alert('Linkki kopioitu leikepöydälle!');
+                    }}
+                    className="px-4 py-2.5 rounded-lg border border-blue-200 hover:bg-blue-50 text-sm font-medium flex items-center justify-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                    Kopioi linkki
+                  </button>
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Share Modal */}
+      {showShareModal && selectedHankinta && (
+        <div
+          className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50"
+          onClick={() => setShowShareModal(false)}
+        >
+          <div
+            className="w-full max-w-md bg-white rounded-2xl shadow-xl border border-blue-100 p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Jaa hankinta tiimille</h3>
+                <p className="text-sm text-gray-600 mt-1">Lähetä sähköpostilla</p>
+              </div>
+              <button
+                onClick={() => setShowShareModal(false)}
+                className="p-2 rounded-md hover:bg-gray-100"
+              >
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                  <path d="M6 6l12 12M18 6L6 18" strokeWidth="2" strokeLinecap="round"/>
+                </svg>
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <p className="text-sm font-medium text-gray-900">{selectedHankinta.title}</p>
+                <p className="text-xs text-gray-600 mt-1">{selectedHankinta.organization}</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Vastaanottajan sähköposti
+                </label>
+                <input
+                  type="email"
+                  value={shareEmail}
+                  onChange={(e) => setShareEmail(e.target.value)}
+                  placeholder="etunimi.sukunimi@yritys.fi"
+                  className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={handleShareProcurement}
+                  disabled={!shareEmail}
+                  className="flex-1 px-4 py-2.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-sm font-medium"
+                >
+                  Lähetä
+                </button>
+                <button
+                  onClick={() => setShowShareModal(false)}
+                  className="px-4 py-2.5 rounded-lg border border-gray-300 hover:bg-gray-50 text-sm font-medium"
+                >
+                  Peruuta
+                </button>
               </div>
             </div>
           </div>
