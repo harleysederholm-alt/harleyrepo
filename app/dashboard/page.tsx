@@ -77,16 +77,12 @@ export default function DashboardPage() {
 
       setProfile(profileData);
 
-      // FREEMIUM LOGIC: 24h viive Free-käyttäjille
+      // Get all procurements (no time filtering - data already has proper published_at)
       const isPremium = profileData.plan === 'pro' || profileData.plan === 'agent';
-      const timeLimit = isPremium
-        ? new Date(0).toISOString() // Premium: Ei rajoitusta
-        : new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(); // Free: 24h viive
 
       const { data: hankintaData, error: hankintaError } = await supabase
         .from('hankinnat')
         .select('*')
-        .lte('published_at', timeLimit)
         .order('published_at', { ascending: false })
         .limit(isPremium ? 500 : 20); // Premium: 500, Free: 20
 
