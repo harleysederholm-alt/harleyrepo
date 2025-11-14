@@ -35,7 +35,7 @@ PROCUREMENT_SITES = {
 }
 
 # AI Analysis settings
-AI_MODEL = 'llama-3.1-70b-versatile'  # Groq model
+AI_MODEL = 'llama-3.3-70b-versatile'  # Groq model (updated 2025)
 AI_TEMPERATURE = 0.3  # Lower for more consistent analysis
 AI_MAX_TOKENS = 2000
 

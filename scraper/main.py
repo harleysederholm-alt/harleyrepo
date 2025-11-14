@@ -34,7 +34,7 @@ class ScraperOrchestrator:
         # Step 1: Scrape new procurements
         print("\n[1/4] Scraping HILMA...")
         procurements = self.hilma_scraper.scrape_latest_procurements(max_results=max_results)
-        print(f"✓ Scraped {len(procurements)} procurements")
+        print(f"[OK] Scraped {len(procurements)} procurements")
 
         if not procurements:
             print("No procurements found. Exiting.")
@@ -43,7 +43,7 @@ class ScraperOrchestrator:
         # Step 2: Save to database
         print("\n[2/4] Saving to database...")
         saved = self.db.bulk_insert_procurements(procurements)
-        print(f"✓ Saved {len(saved)} procurements to database")
+        print(f"[OK] Saved {len(saved)} procurements to database")
 
         # Step 3: Analyze procurements
         print("\n[3/4] Running AI analysis...")
@@ -68,17 +68,17 @@ class ScraperOrchestrator:
 
                 if success:
                     analyzed_count += 1
-                    print(f"  ✓ Category: {analysis['category']}")
-                    print(f"  ✓ Summary: {analysis['ai_summary'][:80]}...")
+                    print(f"  [OK] Category: {analysis['category']}")
+                    print(f"  [OK] Summary: {analysis['ai_summary'][:80]}...")
 
                 # Small delay to respect API rate limits
                 time.sleep(1)
 
             except Exception as e:
-                print(f"  ✗ Error analyzing: {e}")
+                print(f"  [X] Error analyzing: {e}")
                 continue
 
-        print(f"\n✓ Analyzed {analyzed_count} procurements")
+        print(f"\n[OK] Analyzed {analyzed_count} procurements")
 
         # Step 4: Match with user profiles (optional)
         print("\n[4/4] Matching with user profiles...")
@@ -117,24 +117,24 @@ class ScraperOrchestrator:
 
                 if success:
                     analyzed_count += 1
-                    print(f"  ✓ Category: {analysis['category']}")
+                    print(f"  [OK] Category: {analysis['category']}")
 
                 time.sleep(1)
 
             except Exception as e:
-                print(f"  ✗ Error: {e}")
+                print(f"  [X] Error: {e}")
                 continue
 
-        print(f"\n✓ Analyzed {analyzed_count} procurements")
+        print(f"\n[OK] Analyzed {analyzed_count} procurements")
 
 
 def main():
     """Main entry point"""
     print("""
-╔══════════════════════════════════════════════════╗
-║   PienHankinta-Vahti Scraper & Analyzer         ║
-║   Finnish Public Procurement Intelligence       ║
-╚══════════════════════════════════════════════════╝
+====================================================
+   PienHankinta-Vahti Scraper & Analyzer
+   Finnish Public Procurement Intelligence
+====================================================
     """)
 
     orchestrator = ScraperOrchestrator()

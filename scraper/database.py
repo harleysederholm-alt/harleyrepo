@@ -54,10 +54,10 @@ class ProcurementDatabase:
             ).execute()
 
             if result.data:
-                print(f"✓ Saved: {data['title'][:50]}...")
+                print(f"[OK] Saved: {data['title'][:50]}...")
                 return result.data[0]
             else:
-                print(f"✗ Failed to save: {data['title'][:50]}...")
+                print(f"[X] Failed to save: {data['title'][:50]}...")
                 return None
 
         except Exception as e:
